@@ -28,9 +28,13 @@ final class WindowRouter: ObservableObject {
 
     // MARK: - Recording panel
 
-    /// A non-activating floating panel, placed near the cursor. Non-activating
-    /// matters: stealing focus would break paste-back into the previous app.
-    func showRecordingPanel() {
+    /// A non-activating floating panel. Non-activating matters twice over: taking
+    /// focus would both move the caret out of the user's text field and break
+    /// insertion back into it.
+    ///
+    /// `caretRect` is the focused field's caret in Cocoa screen coordinates; the
+    /// panel sits just below it, falling back to the pointer when it's nil.
+    func showRecordingPanel(near caretRect: CGRect? = nil) {
         if recordingPanel == nil {
             let view = RecordingView(
                 controller: controller,
@@ -61,7 +65,7 @@ final class WindowRouter: ObservableObject {
             recordingPanel = panel
         }
 
-        positionNearCursor(recordingPanel!)
+        position(recordingPanel!, near: caretRect)
         recordingPanel?.orderFrontRegardless()
     }
 
@@ -69,16 +73,34 @@ final class WindowRouter: ObservableObject {
         recordingPanel?.orderOut(nil)
     }
 
-    private func positionNearCursor(_ window: NSWindow) {
-        let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
+    private func position(_ window: NSWindow, near caretRect: CGRect?) {
+        let size = window.frame.size
+        let anchor: CGPoint
+        let gap: CGFloat
+
+        if let caretRect {
+            // Centre under the caret, clear of the text line itself.
+            anchor = CGPoint(x: caretRect.midX, y: caretRect.minY)
+            gap = 10
+        } else {
+            anchor = NSEvent.mouseLocation
+            gap = 24
+        }
+
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor) })
+                ?? NSScreen.main
         else { return }
 
-        let size = window.frame.size
-        var origin = NSPoint(x: mouse.x - size.width / 2, y: mouse.y - size.height - 24)
+        var origin = NSPoint(x: anchor.x - size.width / 2, y: anchor.y - size.height - gap)
+
+        // If there's no room below (caret near the bottom of the screen), flip above it.
+        let visible = screen.visibleFrame
+        if origin.y < visible.minY + 12 {
+            let topOfAnchor = caretRect?.maxY ?? anchor.y
+            origin.y = topOfAnchor + gap
+        }
 
         // Keep it fully on screen even when invoked near an edge.
-        let visible = screen.visibleFrame
         origin.x = min(max(origin.x, visible.minX + 12), visible.maxX - size.width - 12)
         origin.y = min(max(origin.y, visible.minY + 12), visible.maxY - size.height - 12)
         window.setFrameOrigin(origin)

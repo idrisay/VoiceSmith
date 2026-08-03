@@ -40,18 +40,24 @@ private struct GeneralPane: View {
             Section("After transcription") {
                 Toggle("Improve with AI", isOn: $settings.improveAutomatically)
                 Toggle("Copy to clipboard", isOn: $settings.copyToClipboard)
-                Toggle("Paste into the frontmost app", isOn: $settings.autoPaste)
-                    .disabled(!settings.copyToClipboard)
+                Toggle("Insert into the focused text field", isOn: $settings.autoPaste)
                 Toggle("Show a notification", isOn: $settings.showNotification)
 
-                if settings.autoPaste && !Delivery.hasAccessibilityPermission {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Pasting needs Accessibility access.")
+                if settings.autoPaste {
+                    if Delivery.hasAccessibilityPermission {
+                        Text("When a text field has focus, the result is written straight into it at the caret. Otherwise it goes to the clipboard only.")
                             .font(.system(size: 11))
-                        Button("Grant…") { Delivery.requestAccessibilityPermission() }
-                            .controlSize(.small)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Inserting needs Accessibility access.")
+                                .font(.system(size: 11))
+                            Button("Grant…") { Delivery.requestAccessibilityPermission() }
+                                .controlSize(.small)
+                        }
                     }
                 }
             }

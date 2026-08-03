@@ -141,24 +141,52 @@ struct RecordingView: View {
 
     // MARK: - Footer
 
-    /// Always visible during a session. The lock icon is the privacy signal.
+    /// Always visible during a session. The lock icon is the privacy signal; the
+    /// destination line tells the user up front whether the text will land in
+    /// their field or only on the clipboard.
     private var providerFooter: some View {
-        HStack(spacing: 6) {
-            Image(systemName: settings.isFullyLocal ? "lock.fill" : "cloud.fill")
-                .font(.system(size: 9))
-                .foregroundStyle(settings.isFullyLocal ? .green : .secondary)
-            Text(settings.speechProvider.displayName)
-            if settings.improveAutomatically {
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 7))
-                    .foregroundStyle(.tertiary)
-                Text(settings.textProvider.displayName)
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: settings.isFullyLocal ? "lock.fill" : "cloud.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(settings.isFullyLocal ? .green : .secondary)
+                Text(settings.speechProvider.displayName)
+                if settings.improveAutomatically {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.tertiary)
+                    Text(settings.textProvider.displayName)
+                }
+                Spacer()
+                Text(settings.activeMode.name)
             }
-            Spacer()
-            Text(settings.activeMode.name)
+
+            if settings.autoPaste {
+                HStack(spacing: 5) {
+                    Image(systemName: destinationSymbol)
+                        .font(.system(size: 9))
+                    Text(destinationLabel)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .foregroundStyle(controller.target.isEditable ? .secondary : .tertiary)
+            }
         }
         .font(.system(size: 10))
         .foregroundStyle(.secondary)
+    }
+
+    private var destinationSymbol: String {
+        controller.target.isEditable ? "arrow.turn.down.right" : "doc.on.clipboard"
+    }
+
+    private var destinationLabel: String {
+        if let target = controller.target.describedTarget {
+            return "Insert into \(target)"
+        }
+        return Delivery.hasAccessibilityPermission
+            ? "No text field focused — clipboard only"
+            : "Clipboard only — grant Accessibility to insert"
     }
 
     private func timeString(_ interval: TimeInterval) -> String {

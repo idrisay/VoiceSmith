@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         WindowRouter.shared.configure(controller: controller, settings: settings, store: store)
         controller.attachWindow(
-            present: { WindowRouter.shared.showRecordingPanel() },
+            present: { caretRect in WindowRouter.shared.showRecordingPanel(near: caretRect) },
             dismiss: { WindowRouter.shared.hideRecordingPanel() }
         )
 

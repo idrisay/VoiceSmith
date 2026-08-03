@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Foundation
 import UserNotifications
 
@@ -25,6 +26,39 @@ enum Delivery {
     static func requestAccessibilityPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         AXIsProcessTrustedWithOptions(options as CFDictionary)
+    }
+
+    /// How the text actually reached the target — the panel reports this back.
+    enum InsertionMethod {
+        /// Written straight into the focused field. Leaves the clipboard untouched
+        /// and doesn't depend on the app honouring a synthetic keystroke.
+        case directInsertion
+        /// Synthetic ⌘V into the frontmost app.
+        case paste
+    }
+
+    /// Delivers text to the field that had focus when recording started.
+    ///
+    /// Writing to the element directly is preferred: it lands at the caret,
+    /// replaces any selection, and survives apps that ignore synthetic keystrokes.
+    /// Web views and Electron apps generally don't accept it, so ⌘V is the fallback.
+    @discardableResult
+    static func insert(_ text: String, into target: FocusedInput) throws -> InsertionMethod {
+        guard hasAccessibilityPermission else {
+            throw VoiceSmithError.accessibilityPermissionDenied
+        }
+
+        if let element = target.element,
+           AXUIElementSetAttributeValue(
+               element,
+               kAXSelectedTextAttribute as CFString,
+               text as CFTypeRef
+           ) == .success {
+            return .directInsertion
+        }
+
+        try paste(into: target.application)
+        return .paste
     }
 
     /// Reactivates the app that was frontmost when recording started, then

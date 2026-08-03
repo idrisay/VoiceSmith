@@ -69,9 +69,11 @@ The user presses the global shortcut, or clicks the menu bar icon.
 VoiceSmith:
 
 - Requests microphone permission on first use.
-- Records the frontmost application, so the result can be pasted back into it.
-- Shows the floating recording window near the cursor.
+- Captures the focused text field, before anything can move focus away from it.
+- Shows the floating recording window just below the caret, falling back to the pointer when the app reports no caret position.
 - Begins recording immediately, without waiting for the window animation.
+
+The focused field is captured first because showing the window or requesting a permission can move focus, and by then the caret is gone.
 
 ## 2. Record
 
@@ -115,11 +117,23 @@ The raw transcript is passed to the selected text provider using the active mode
 By default, VoiceSmith:
 
 - Copies the improved text to the clipboard.
-- Pastes it into the application that was frontmost at invocation.
+- Inserts it into the text field that was focused at invocation.
 - Shows a confirmation notification.
 - Saves the note to local history.
 
-Each of these is individually configurable. A user who only wants the clipboard filled should be able to turn off automatic pasting.
+Each of these is individually configurable. A user who only wants the clipboard filled should be able to turn off insertion.
+
+## Insertion
+
+Insertion targets the specific field, not just the application:
+
+- The text is written to the focused element at the caret, replacing any selection. This leaves the clipboard untouched and does not depend on the app honouring a synthetic keystroke.
+- Apps that reject a direct write — web views and Electron apps, mostly — fall back to reactivating the app and sending `⌘V`.
+- **When no editable text field was focused, nothing is inserted.** The text goes to the clipboard and the notification says so. Firing `⌘V` at whatever happens to be frontmost would put text somewhere the user never asked for.
+
+The recording window states the destination for the whole session — either the field it will insert into, or that this one is clipboard-only — so the outcome is never a surprise.
+
+Insertion requires Accessibility permission. Without it VoiceSmith cannot see the focused field at all, so it degrades to clipboard-only and says why.
 
 ## 6. Review
 
@@ -464,3 +478,5 @@ Choosing CloudKit for iOS makes the PWA significantly harder later. This decisio
 - Personal AI writing style
 - Semantic search and chat with notes
 - Translation
+
+

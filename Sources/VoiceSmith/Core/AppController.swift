@@ -27,14 +27,15 @@ final class AppController: ObservableObject {
     @Published private(set) var statusDetail: String = ""
     /// Audio kept aside after a failure so the user can retry without re-dictating.
     @Published private(set) var pendingAudio: URL?
+    /// The text field captured at invoke. Drives both panel placement and delivery.
+    @Published private(set) var target: FocusedInput = .none
 
     let recorder = AudioRecorder()
     let settings: AppSettings
     let store: NoteStore
 
-    private var targetApplication: NSRunningApplication?
     private var work: Task<Void, Never>?
-    private var windowPresenter: (() -> Void)?
+    private var windowPresenter: ((CGRect?) -> Void)?
     private var windowDismisser: (() -> Void)?
 
     init(settings: AppSettings, store: NoteStore) {
@@ -46,7 +47,7 @@ final class AppController: ObservableObject {
         }
     }
 
-    func attachWindow(present: @escaping () -> Void, dismiss: @escaping () -> Void) {
+    func attachWindow(present: @escaping (CGRect?) -> Void, dismiss: @escaping () -> Void) {
         windowPresenter = present
         windowDismisser = dismiss
     }
@@ -67,8 +68,9 @@ final class AppController: ObservableObject {
     }
 
     func beginRecording() {
-        // Remember where the text should end up before we steal focus.
-        targetApplication = NSWorkspace.shared.frontmostApplication
+        // Capture the focused field *first*: showing the panel or requesting
+        // permission can move focus, and by then the caret is gone.
+        target = FocusedInput.capture()
 
         Task { @MainActor in
             guard await ensureMicrophoneAccess() else {
@@ -81,7 +83,10 @@ final class AppController: ObservableObject {
                 phase = .recording
                 statusDetail = ""
                 pendingAudio = nil
-                windowPresenter?()
+                // Anchor the panel to the caret so it appears where the user is
+                // already looking; fall back to the pointer when the app doesn't
+                // report a caret position.
+                windowPresenter?(target.caretRect)
             } catch let error as VoiceSmithError {
                 present(error)
             } catch {
@@ -228,24 +233,32 @@ final class AppController: ObservableObject {
         if settings.copyToClipboard {
             Delivery.copyToClipboard(text)
         }
-        if settings.autoPaste {
+
+        // Only write into another app when a text field actually had focus.
+        // Firing ⌘V at whatever happens to be frontmost would dump the text
+        // somewhere the user never asked for.
+        if settings.autoPaste && target.isEditable {
             do {
-                try Delivery.paste(into: targetApplication)
+                try Delivery.insert(text, into: target)
             } catch let error as VoiceSmithError {
-                // Clipboard still worked — degrade rather than fail.
+                // The clipboard still holds it — degrade rather than fail.
                 statusDetail = error.errorDescription ?? ""
                 if settings.showNotification {
                     Delivery.notify(
-                        title: "Copied, but not pasted",
+                        title: "Copied, but not inserted",
                         body: error.recoverySuggestion ?? ""
                     )
                 }
                 return
             } catch {}
         }
+
         if settings.showNotification {
             let preview = text.count > 80 ? String(text.prefix(80)) + "…" : text
-            Delivery.notify(title: "VoiceSmith", body: preview)
+            let title = (settings.autoPaste && !target.isEditable)
+                ? "Copied to clipboard — press ⌘V to paste"
+                : "VoiceSmith"
+            Delivery.notify(title: title, body: preview)
         }
     }
 
@@ -283,7 +296,7 @@ final class AppController: ObservableObject {
     private func present(_ error: VoiceSmithError, keepingAudio audio: URL? = nil) {
         pendingAudio = audio
         phase = .failed(error)
-        windowPresenter?()
+        windowPresenter?(target.caretRect)
         if settings.showNotification {
             Delivery.notify(
                 title: error.errorDescription ?? "VoiceSmith",
