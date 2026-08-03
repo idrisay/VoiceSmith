@@ -64,6 +64,12 @@ private struct GeneralPane: View {
 
             Section("Startup") {
                 LaunchAtLoginToggle()
+                HStack {
+                    Text("Setup assistant")
+                    Spacer()
+                    Button("Run again…") { WindowRouter.shared.openOnboarding() }
+                        .controlSize(.small)
+                }
             }
 
             Section("Recording") {

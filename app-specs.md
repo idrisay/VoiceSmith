@@ -60,6 +60,28 @@ Features:
 
 ---
 
+# First Run
+
+On first launch VoiceSmith opens a setup assistant. Nothing about the app works until a transcription route exists, so the assistant asks for that rather than leaving the user to find Settings.
+
+Six steps:
+
+1. **Welcome** — what the app does, and the shortcut that drives it.
+2. **Speech provider** — local options presented first, since Apple Speech needs no key, no account, and no network. Cloud options follow, each with a direct link to where that provider issues keys.
+3. **Text provider** — the same shape, plus a switch to turn AI improvement off entirely. With it off, VoiceSmith never contacts a text model.
+4. **Permissions** — microphone, speech recognition, and Accessibility, each with its own live status. The list polls while on screen, because grants made in System Settings send no notification.
+5. **Audio retention** — the decision from [Audio retention](#audio-retention), asked here rather than buried in preferences.
+6. **Summary** — the resulting configuration, and a prompt to try it.
+
+Rules:
+
+- **Keys are verified, not just stored.** Where a provider supports it, a Test button round-trips a short string through the configured model. A wrong key or a mistyped model name surfaces during setup rather than mid-dictation.
+- **Keys go straight to the Keychain** as they're entered, and the field never displays a stored value.
+- **Local providers are probed live.** If Ollama or LM Studio isn't running, the step says so and offers to re-check, rather than accepting a configuration that cannot work.
+- **Setup is skippable and repeatable.** Every step can be skipped, closing the window counts as finishing, and Settings › General re-opens the assistant. Defaults are chosen so that skipping everything still leaves a working app: Apple Speech transcribes on-device with no key.
+
+---
+
 # Core User Flow
 
 ## 1. Invoke

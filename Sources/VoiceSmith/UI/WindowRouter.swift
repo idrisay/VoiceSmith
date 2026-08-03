@@ -13,6 +13,8 @@ final class WindowRouter: ObservableObject {
     private var recordingPanel: NSPanel?
     private var historyWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
+    private var onboardingCloseObserver: Any?
 
     private var controller: AppController!
     private var settings: AppSettings!
@@ -155,7 +157,45 @@ final class WindowRouter: ObservableObject {
 
     func openOnboardingIfNeeded() {
         guard !settings.hasCompletedOnboarding else { return }
-        openSettings(.privacy)
-        settings.hasCompletedOnboarding = true
+        openOnboarding()
+    }
+
+    func openOnboarding() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        if onboardingWindow == nil {
+            let view = OnboardingView(settings: settings) { [weak self] in
+                self?.onboardingWindow?.close()
+                self?.onboardingWindow = nil
+            }
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 540),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "VoiceSmith Setup"
+            window.titlebarAppearsTransparent = true
+            window.contentViewController = NSHostingController(rootView: view)
+            window.center()
+            window.isReleasedWhenClosed = false
+
+            // Closing the window counts as finishing. Re-showing it on every
+            // launch until the user reaches the last step would be nagware —
+            // Settings › General has a "Run again…" button for a second pass.
+            onboardingCloseObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.settings.hasCompletedOnboarding = true
+                    self?.onboardingWindow = nil
+                }
+            }
+
+            onboardingWindow = window
+        }
+        onboardingWindow?.makeKeyAndOrderFront(nil)
     }
 }
