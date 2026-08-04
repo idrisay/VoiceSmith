@@ -43,7 +43,7 @@ enum Delivery {
     /// replaces any selection, and survives apps that ignore synthetic keystrokes.
     /// Web views and Electron apps generally don't accept it, so ⌘V is the fallback.
     @discardableResult
-    static func insert(_ text: String, into target: FocusedInput) throws -> InsertionMethod {
+    static func insert(_ text: String, into target: FocusedInput, copiedToClipboard: Bool) throws -> InsertionMethod {
         guard hasAccessibilityPermission else {
             throw VoiceSmithError.accessibilityPermissionDenied
         }
@@ -57,7 +57,25 @@ enum Delivery {
             return .directInsertion
         }
 
+        // ⌘V pastes whatever is on the clipboard, so the text has to be there
+        // first. When the user has clipboard copying switched off, borrow it and
+        // hand it back — pasting stale clipboard contents would be worse than
+        // not pasting at all.
+        let restore: String? = copiedToClipboard
+            ? nil
+            : NSPasteboard.general.string(forType: .string)
+        if !copiedToClipboard {
+            copyToClipboard(text)
+        }
+
         try paste(into: target.application)
+
+        if let restore {
+            // Give the paste time to land before putting the clipboard back.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                copyToClipboard(restore)
+            }
+        }
         return .paste
     }
 

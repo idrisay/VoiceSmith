@@ -234,13 +234,23 @@ final class AppController: ObservableObject {
             Delivery.copyToClipboard(text)
         }
 
-        // Only write into another app when a text field actually had focus.
-        // Firing ⌘V at whatever happens to be frontmost would dump the text
-        // somewhere the user never asked for.
-        if settings.autoPaste && target.isEditable {
+        // Attempt insertion whenever it's switched on. Detection of "is this a
+        // text field" is unreliable across browsers and Electron apps, and
+        // refusing to paste on a failed detection silently did nothing in the
+        // most common case. ⌘V into a non-text context is harmless by comparison.
+        if settings.autoPaste {
             do {
-                try Delivery.insert(text, into: target)
+                let method = try Delivery.insert(
+                    text,
+                    into: target,
+                    copiedToClipboard: settings.copyToClipboard
+                )
+                UserDefaults.standard.set(
+                    "\(method) into \(target.describedTarget ?? "frontmost app")",
+                    forKey: "diagnostic.lastDelivery"
+                )
             } catch let error as VoiceSmithError {
+                UserDefaults.standard.set("failed: \(error)", forKey: "diagnostic.lastDelivery")
                 // The clipboard still holds it — degrade rather than fail.
                 statusDetail = error.errorDescription ?? ""
                 if settings.showNotification {
@@ -255,9 +265,9 @@ final class AppController: ObservableObject {
 
         if settings.showNotification {
             let preview = text.count > 80 ? String(text.prefix(80)) + "…" : text
-            let title = (settings.autoPaste && !target.isEditable)
-                ? "Copied to clipboard — press ⌘V to paste"
-                : "VoiceSmith"
+            let title = settings.autoPaste
+                ? "VoiceSmith"
+                : "Copied to clipboard — press ⌘V to paste"
             Delivery.notify(title: title, body: preview)
         }
     }

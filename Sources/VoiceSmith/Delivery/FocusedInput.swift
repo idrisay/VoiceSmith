@@ -77,17 +77,33 @@ struct FocusedInput {
             element, kAXSelectedTextAttribute as CFString, &selectedTextSettable
         ) == .success && selectedTextSettable.boolValue
 
-        guard valueWritable || selectionWritable else { return false }
+        // A settable value is the cleanest signal, but plenty of real text fields
+        // don't report one — browsers and Electron apps especially. Requiring it
+        // classified those as "not a text field" and skipped insertion entirely,
+        // which is the common case, not an edge case.
+        //
+        // A selected-text *range* is the better tell: only text controls have a
+        // caret, and web inputs expose it even when they refuse a direct write.
+        var range: AnyObject?
+        let hasCaret = AXUIElementCopyAttributeValue(
+            element, kAXSelectedTextRangeAttribute as CFString, &range
+        ) == .success
 
-        // Web views and Electron apps report generic roles, so a settable value
-        // is the real signal; the role check only rules out obvious non-text controls.
-        switch role(of: element) {
+        let role = role(of: element)
+        let textRole = [
+            "AXTextField", "AXTextArea", "AXComboBox", "AXSearchField",
+        ].contains(role)
+
+        // Controls that are definitely not text, whatever else they report.
+        switch role {
         case "AXButton", "AXCheckBox", "AXRadioButton", "AXMenuItem", "AXSlider",
-             "AXPopUpButton", "AXImage":
+             "AXPopUpButton", "AXImage", "AXLink", "AXDisclosureTriangle":
             return false
         default:
-            return true
+            break
         }
+
+        return valueWritable || selectionWritable || hasCaret || textRole
     }
 
     private static func role(of element: AXUIElement) -> String {

@@ -44,23 +44,31 @@ extendedKeyUsage     = critical,codeSigning
 CONF
 
 echo "==> generating a self-signed code-signing certificate"
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+/usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
   -config "$TMP/openssl.cnf" \
   -keyout "$TMP/key.pem" -out "$TMP/cert.pem" >/dev/null 2>&1
 
-openssl pkcs12 -export -legacy \
+# macOS's importer rejects OpenSSL 3's default PKCS#12 MAC algorithm, and
+# rejects an empty password outright — so use the system LibreSSL and a
+# throwaway passphrase.
+/usr/bin/openssl pkcs12 -export \
   -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
-  -out "$TMP/identity.p12" -passout pass: >/dev/null 2>&1 \
-  || openssl pkcs12 -export \
-       -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
-       -out "$TMP/identity.p12" -passout pass: >/dev/null 2>&1
+  -out "$TMP/identity.p12" -passout pass:voicesmith >/dev/null 2>&1
 
 echo "==> importing into your login keychain"
 echo "    (macOS may ask for your password, and whether to allow codesign access)"
 security import "$TMP/identity.p12" \
   -k "$KEYCHAIN" \
-  -P "" \
+  -P voicesmith \
   -T /usr/bin/codesign
+
+# A self-signed certificate isn't a usable signing identity until it's trusted
+# for code signing — without this, `find-identity -v` reports zero identities.
+CERT_PEM="$(security find-certificate -c "$NAME" -p "$KEYCHAIN" 2>/dev/null)"
+if [ -n "$CERT_PEM" ]; then
+  printf '%s\n' "$CERT_PEM" > "$TMP/trust.pem"
+  security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$TMP/trust.pem" >/dev/null 2>&1 || true
+fi
 
 # Let codesign use the key without prompting on every build.
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN" >/dev/null 2>&1 || true
