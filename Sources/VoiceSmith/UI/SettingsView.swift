@@ -374,7 +374,38 @@ private struct ShortcutPane: View {
 
     var body: some View {
         Form {
-            Section("Global shortcut") {
+            Section("Double-tap Shift") {
+                Toggle("Start and stop by tapping Shift twice", isOn: $settings.triggerOnDoubleShift)
+                    .onChange(of: settings.triggerOnDoubleShift) { _, _ in
+                        NotificationCenter.default.post(name: .shortcutChanged, object: nil)
+                    }
+
+                if settings.triggerOnDoubleShift {
+                    if Delivery.hasAccessibilityPermission {
+                        Text("Taps must land within about a third of a second. Holding Shift, or using it with another key, is ignored — so typing capitals never triggers it.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Needs Accessibility access — a modifier tap can't be a system shortcut.")
+                                .font(.system(size: 11))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button("Grant…") { Delivery.requestAccessibilityPermission() }
+                                .controlSize(.small)
+                        }
+                    }
+
+                    Text("Some editors, including the JetBrains IDEs, use double-tap Shift themselves. In those apps both will fire.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Section("Key combination") {
                 HStack {
                     Text("Start / stop recording")
                     Spacer()

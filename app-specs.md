@@ -58,9 +58,19 @@ Features:
 - Note history with search
 - Launch at login
 
-## Global shortcut
+## Trigger
 
-Default: `⌃⌥⌘Space`.
+**Default: double-tap `Shift`.** No chord to learn, nothing to collide with a system shortcut, and both hands stay where they were.
+
+A modifier tap cannot be a system hot key — `RegisterEventHotKey` needs a real key — so this is detected by watching modifier-flag changes, which requires Accessibility permission. It reports when it can't be armed rather than leaving the user tapping at nothing.
+
+Detection rules, so it never fires while typing:
+
+- Both taps must land within about a third of a second.
+- Only a clean `Shift` press counts. `Shift` held down, or combined with any other modifier, is ignored.
+- Any ordinary keystroke between the taps cancels — which is what stops capital letters from triggering it.
+
+A key combination remains available as an alternative, defaulting to `⌃⌥⌘Space`.
 
 **Not `⌥⌘Space`.** macOS reserves that for "Show Finder search window", and the system handler runs first — pressing it opened a Finder search window instead of recording. A reserved combination is worse than an unbound one, because registration *appears* to succeed.
 

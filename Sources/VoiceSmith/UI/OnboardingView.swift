@@ -122,8 +122,8 @@ struct OnboardingView: View {
                 .font(.system(size: 13))
 
             VStack(alignment: .leading, spacing: 12) {
-                NumberedStep(number: "1", text: "Press **\(shortcutDescription)** from anywhere.")
-                NumberedStep(number: "2", text: "Speak. Press it again when you're done.")
+                NumberedStep(number: "1", text: "Tap **\(shortcutDescription)** from anywhere.")
+                NumberedStep(number: "2", text: "Speak. Do it again when you're done.")
                 NumberedStep(number: "3", text: "The polished text lands in whatever text field you were in.")
             }
             .padding(14)
@@ -165,17 +165,19 @@ struct OnboardingView: View {
                 .foregroundStyle(.green)
             }
 
-            Text("Try it now: click into any text field and press \(shortcutDescription).")
+            Text("Try it now: click into any text field and \(shortcutDescription).")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
     }
 
     private var shortcutDescription: String {
-        GlobalShortcut.describe(
-            keyCode: settings.shortcutKeyCode,
-            modifiers: settings.shortcutModifiers
-        )
+        settings.triggerOnDoubleShift
+            ? "double-tap ⇧"
+            : GlobalShortcut.describe(
+                keyCode: settings.shortcutKeyCode,
+                modifiers: settings.shortcutModifiers
+            )
     }
 
     private struct NumberedStep: View {
@@ -613,7 +615,9 @@ private struct PermissionsStep: View {
 
             PermissionRow(
                 title: "Accessibility",
-                detail: "Optional. Lets VoiceSmith see which text field you're in and write the result into it. Without it you'll get the text on the clipboard and paste it yourself.",
+                detail: settings.triggerOnDoubleShift
+                    ? "Required for double-tap Shift, and for writing the result into the field you're in. Without it, use the key combination and paste manually."
+                    : "Optional. Lets VoiceSmith see which text field you're in and write the result into it. Without it you'll get the text on the clipboard and paste it yourself.",
                 granted: accessibility,
                 denied: false,
                 action: { Delivery.requestAccessibilityPermission() },

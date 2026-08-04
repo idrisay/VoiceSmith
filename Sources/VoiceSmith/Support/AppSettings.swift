@@ -56,6 +56,11 @@ final class AppSettings: ObservableObject {
             }
         }
     }
+    /// Double-tap Shift as the primary trigger. Needs Accessibility, since a
+    /// modifier-only tap can't be a system hot key.
+    @Published var triggerOnDoubleShift: Bool {
+        didSet { defaults.set(triggerOnDoubleShift, forKey: "triggerOnDoubleShift") }
+    }
     @Published var shortcutKeyCode: UInt32 {
         didSet { defaults.set(Int(shortcutKeyCode), forKey: "shortcutKeyCode") }
     }
@@ -78,6 +83,7 @@ final class AppSettings: ObservableObject {
             "audioRetention": AudioRetention.deleteAfterTranscription.rawValue,
             "maxRecordingSeconds": 600,
             "hasCompletedOnboarding": false,
+            "triggerOnDoubleShift": true,
             // ⌃⌥⌘Space. kVK_Space is 49; 6400 = controlKey|optionKey|cmdKey.
             // Not ⌥⌘Space: macOS reserves that for "Show Finder search window",
             // so it opened Finder instead of recording.
@@ -98,6 +104,7 @@ final class AppSettings: ObservableObject {
         audioRetention = AudioRetention(rawValue: defaults.string(forKey: "audioRetention") ?? "") ?? .deleteAfterTranscription
         maxRecordingSeconds = defaults.integer(forKey: "maxRecordingSeconds")
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
+        triggerOnDoubleShift = defaults.bool(forKey: "triggerOnDoubleShift")
         shortcutKeyCode = UInt32(defaults.integer(forKey: "shortcutKeyCode"))
         shortcutModifiers = UInt32(defaults.integer(forKey: "shortcutModifiers"))
 

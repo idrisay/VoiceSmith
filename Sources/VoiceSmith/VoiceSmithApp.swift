@@ -31,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var menuBarSymbol = "mic"
     /// Non-nil when the configured shortcut will never reach us.
     @Published var shortcutProblem: String?
+    /// Non-nil when double-tap Shift is on but couldn't be armed.
+    @Published var doubleShiftProblem: String?
 
     private var phaseObserver: Any?
 
@@ -45,12 +47,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
 
         registerShortcut()
+        registerDoubleShift()
         NotificationCenter.default.addObserver(
             forName: .shortcutChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.registerShortcut() }
+            MainActor.assumeIsolated {
+                self?.registerShortcut()
+                self?.registerDoubleShift()
+            }
         }
 
         observePhase()
@@ -67,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationWillTerminate(_ notification: Notification) {
         GlobalShortcut.shared.unregister()
         GlobalShortcut.cancel.unregister()
+        DoubleTapShortcut.shared.disable()
     }
 
     // MARK: - Shortcut
@@ -93,6 +100,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         } else {
             shortcutProblem = nil
         }
+    }
+
+    /// Double-tap Shift, the default way in. Unlike the key chord this needs
+    /// Accessibility, so report when it can't be armed instead of leaving the
+    /// user tapping at nothing.
+    private func registerDoubleShift() {
+        guard settings.triggerOnDoubleShift else {
+            DoubleTapShortcut.shared.disable()
+            doubleShiftProblem = nil
+            return
+        }
+        let armed = DoubleTapShortcut.shared.enable { [weak self] in
+            self?.controller.toggle()
+        }
+        doubleShiftProblem = armed
+            ? nil
+            : "Double-tap Shift needs Accessibility access."
     }
 
     /// Escape cancels, from whatever app the user is actually in.
@@ -168,6 +192,12 @@ private struct MenuBarContent: View {
 
         Divider()
 
+        if let problem = delegate.doubleShiftProblem {
+            Button("⚠︎ \(problem) Grant…") {
+                Delivery.requestAccessibilityPermission()
+            }
+        }
+
         if let problem = delegate.shortcutProblem {
             Button("⚠︎ \(problem) Choose another…") {
                 WindowRouter.shared.openSettings(.shortcuts)
@@ -186,10 +216,12 @@ private struct MenuBarContent: View {
     }
 
     private var statusLine: String {
-        let shortcut = GlobalShortcut.describe(
-            keyCode: settings.shortcutKeyCode,
-            modifiers: settings.shortcutModifiers
-        )
+        let shortcut = settings.triggerOnDoubleShift
+            ? "Double-tap ⇧"
+            : GlobalShortcut.describe(
+                keyCode: settings.shortcutKeyCode,
+                modifiers: settings.shortcutModifiers
+            )
         let route = settings.improveAutomatically
             ? "\(settings.speechProvider.displayName) → \(settings.textProvider.displayName)"
             : settings.speechProvider.displayName
