@@ -28,6 +28,10 @@ enum Delivery {
         AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 
+    /// Why the last direct-write attempt was or wasn't believed. Recorded because
+    /// a silent no-op write is indistinguishable from success without it.
+    static var lastAttemptDetail = ""
+
     /// How the text actually reached the target — the panel reports this back.
     enum InsertionMethod {
         /// Written straight into the focused field. Leaves the clipboard untouched
@@ -48,13 +52,29 @@ enum Delivery {
             throw VoiceSmithError.accessibilityPermissionDenied
         }
 
-        if let element = target.element,
-           AXUIElementSetAttributeValue(
-               element,
-               kAXSelectedTextAttribute as CFString,
-               text as CFTypeRef
-           ) == .success {
-            return .directInsertion
+        // A direct write is preferable when it works — it lands at the caret and
+        // leaves the clipboard alone. But its return value cannot be trusted:
+        // Electron apps (VS Code, Slack, Discord) accept the call, report
+        // success, and do nothing. Believing them meant never falling back, so
+        // the text silently went only to the clipboard.
+        //
+        // So verify the document actually grew, and treat "can't tell" as failure.
+        if let element = target.element {
+            let before = characterCount(of: element)
+            let wrote = AXUIElementSetAttributeValue(
+                element,
+                kAXSelectedTextAttribute as CFString,
+                text as CFTypeRef
+            ) == .success
+            let after = characterCount(of: element)
+
+            lastAttemptDetail = "write=\(wrote) chars \(before.map(String.init) ?? "?")→\(after.map(String.init) ?? "?")"
+
+            if wrote, let before, let after, after != before {
+                return .directInsertion
+            }
+        } else {
+            lastAttemptDetail = "no element"
         }
 
         // ⌘V pastes whatever is on the clipboard, so the text has to be there
@@ -77,6 +97,29 @@ enum Delivery {
             }
         }
         return .paste
+    }
+
+    /// Length of the field's contents, used to confirm a direct write landed.
+    /// Returns nil when the app won't tell us — which itself means its
+    /// accessibility support is too partial to trust, so callers treat nil as
+    /// "assume the write failed" and paste instead.
+    private static func characterCount(of element: AXUIElement) -> Int? {
+        // Cheap and widely implemented — avoids pulling a whole document across.
+        var count: AnyObject?
+        if AXUIElementCopyAttributeValue(
+            element, kAXNumberOfCharactersAttribute as CFString, &count
+        ) == .success, let number = count as? Int {
+            return number
+        }
+
+        var value: AnyObject?
+        if AXUIElementCopyAttributeValue(
+            element, kAXValueAttribute as CFString, &value
+        ) == .success, let string = value as? String {
+            return string.count
+        }
+
+        return nil
     }
 
     /// Reactivates the app that was frontmost when recording started, then

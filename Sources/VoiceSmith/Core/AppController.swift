@@ -246,7 +246,7 @@ final class AppController: ObservableObject {
                     copiedToClipboard: settings.copyToClipboard
                 )
                 UserDefaults.standard.set(
-                    "\(method) into \(target.describedTarget ?? "frontmost app")",
+                    "\(method) into \(target.describedTarget ?? "frontmost app") [\(Delivery.lastAttemptDetail)]",
                     forKey: "diagnostic.lastDelivery"
                 )
             } catch let error as VoiceSmithError {
