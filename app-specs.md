@@ -52,6 +52,19 @@ Features:
 - Menu bar application, no Dock icon by default
 - Global keyboard shortcut
 - Floating recording popup
+
+## Menu bar
+
+With no Dock icon and no main window, the menu bar is the app — both its status display and its control surface.
+
+The icon is drawn rather than taken from a symbol set, so the silhouette stays distinctive at 18pt, and it reports state at a glance: an outlined mic when idle, a filled red mic while recording, a waveform while transcribing or improving, and a struck-through mic when something needs attention. Every variant is a template image so macOS recolours it for light and dark menu bars — except the recording state, which keeps its own red precisely so a live mic is unmistakable.
+
+The menu carries everything a user changes *between* dictations — mode, speech provider, text provider, and each delivery step — so switching providers or turning off AI improvement never requires opening a window. Settings keeps what you configure once: keys, the trigger, retention, custom modes.
+
+Two rules:
+
+- **Anything blocking the app appears at the top of the menu, with its fix one click away.** A missing Accessibility grant or a shortcut macOS has taken is not a silent condition.
+- **Cloud providers with no stored key are labelled as such in the list**, rather than being selectable and then failing after the user has already spoken.
 - Clipboard integration
 - Automatic paste into the frontmost application
 - Notifications

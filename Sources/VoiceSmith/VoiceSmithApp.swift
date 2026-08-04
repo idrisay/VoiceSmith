@@ -14,7 +14,7 @@ struct VoiceSmithApp: App {
                 delegate: delegate
             )
         } label: {
-            Image(systemName: delegate.menuBarSymbol)
+            Image(nsImage: delegate.menuBarIcon)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     lazy var store = NoteStore()
     lazy var controller = AppController(settings: settings, store: store)
 
-    @Published var menuBarSymbol = "mic"
+    @Published var menuBarIcon = MenuBarIcon.image(for: .idle)
     /// Non-nil when the configured shortcut will never reach us.
     @Published var shortcutProblem: String?
     /// Non-nil when double-tap Shift is on but couldn't be armed.
@@ -181,90 +181,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         phaseObserver = controller.$phase.sink { [weak self] phase in
             guard let self else { return }
             switch phase {
-            case .recording: self.menuBarSymbol = "mic.fill"
-            case .transcribing, .improving: self.menuBarSymbol = "waveform"
-            case .failed: self.menuBarSymbol = "mic.badge.xmark"
-            default: self.menuBarSymbol = "mic"
+            case .recording: self.menuBarIcon = MenuBarIcon.image(for: .recording)
+            case .transcribing, .improving: self.menuBarIcon = MenuBarIcon.image(for: .working)
+            case .failed: self.menuBarIcon = MenuBarIcon.image(for: .problem)
+            default: self.menuBarIcon = MenuBarIcon.image(for: .idle)
             }
             // Bare Escape is only ours while something is actually in flight.
             self.setEscapeCapture(active: phase.isBusy)
             // Let SwiftUI lay the new state out before measuring it.
             DispatchQueue.main.async { WindowRouter.shared.resizeRecordingPanel() }
         }
-    }
-}
-
-// MARK: - Menu
-
-private struct MenuBarContent: View {
-    @ObservedObject var controller: AppController
-    @ObservedObject var settings: AppSettings
-    @ObservedObject var delegate: AppDelegate
-
-    var body: some View {
-        Button(controller.phase == .recording ? "Stop Recording" : "Start Recording") {
-            controller.toggle()
-        }
-        .keyboardShortcut("r")
-
-        if controller.phase == .recording {
-            Button("Cancel Recording") { controller.cancel() }
-        }
-
-        Divider()
-
-        Menu("Mode") {
-            ForEach(settings.allModes) { mode in
-                Button {
-                    settings.modeID = mode.id
-                } label: {
-                    if mode.id == settings.modeID {
-                        Label(mode.name, systemImage: "checkmark")
-                    } else {
-                        Text(mode.name)
-                    }
-                }
-            }
-        }
-
-        Button("History…") { WindowRouter.shared.openHistory() }
-            .keyboardShortcut("h")
-
-        Divider()
-
-        if let problem = delegate.doubleShiftProblem {
-            Button("⚠︎ \(problem) Grant…") {
-                Delivery.requestAccessibilityPermission()
-            }
-        }
-
-        if let problem = delegate.shortcutProblem {
-            Button("⚠︎ \(problem) Choose another…") {
-                WindowRouter.shared.openSettings(.shortcuts)
-            }
-        }
-
-        Text(statusLine)
-
-        Button("Settings…") { WindowRouter.shared.openSettings() }
-            .keyboardShortcut(",")
-
-        Divider()
-
-        Button("Quit VoiceSmith") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
-    }
-
-    private var statusLine: String {
-        let shortcut = settings.triggerOnDoubleShift
-            ? "Double-tap ⇧"
-            : GlobalShortcut.describe(
-                keyCode: settings.shortcutKeyCode,
-                modifiers: settings.shortcutModifiers
-            )
-        let route = settings.improveAutomatically
-            ? "\(settings.speechProvider.displayName) → \(settings.textProvider.displayName)"
-            : settings.speechProvider.displayName
-        return "\(shortcut)  ·  \(route)"
     }
 }
