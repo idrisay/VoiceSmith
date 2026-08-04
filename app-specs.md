@@ -51,12 +51,24 @@ Features:
 
 - Menu bar application, no Dock icon by default
 - Global keyboard shortcut
-- Floating recording window
+- Floating recording popup
 - Clipboard integration
 - Automatic paste into the frontmost application
 - Notifications
 - Note history with search
 - Launch at login
+
+## Global shortcut
+
+Default: `⌃⌥⌘Space`.
+
+**Not `⌥⌘Space`.** macOS reserves that for "Show Finder search window", and the system handler runs first — pressing it opened a Finder search window instead of recording. A reserved combination is worse than an unbound one, because registration *appears* to succeed.
+
+Rules:
+
+- VoiceSmith checks the chosen combination against the set macOS reserves, and against whether the registration was actually granted. Either failure is reported in the menu bar and in Settings, with a link to change it. A shortcut must never silently do someone else's thing.
+- Where a conflict is with a system shortcut the user can disable, Settings links to Keyboard Shortcuts so they can free the combination up rather than being forced onto another one.
+- `Escape` cancels while a session is live. It is claimed as a system hot key for exactly that window and released immediately after, because the popup never takes focus — a focus-dependent key monitor would never see it — and holding `Escape` system-wide the rest of the time would break every other app.
 
 ---
 
@@ -99,11 +111,7 @@ The focused field is captured first because showing the window or requesting a p
 
 ## 2. Record
 
-The recording window shows:
-
-- A live waveform.
-- An elapsed timer.
-- The active transcription and improvement providers.
+The popup is small and stays out of the way — a mic that reacts to input level, a live sound meter, an elapsed timer, and stop. Provider and mode belong in the menu bar and Settings, not in front of someone mid-sentence.
 
 Controls:
 
@@ -111,6 +119,8 @@ Controls:
 - Resume
 - Stop
 - Cancel
+
+The popup must never take keyboard focus or activate the app. Activating an accessory app makes macOS switch to whichever Space holds its other windows, which would throw the user onto another desktop on every press — and taking focus would move the caret out of the field the text is meant to land in.
 
 Behaviour:
 

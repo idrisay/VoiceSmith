@@ -393,6 +393,31 @@ private struct ShortcutPane: View {
                 Text("Works from any application. Press the shortcut again to stop, or Escape to cancel.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+
+                if let conflict = GlobalShortcut.systemConflict(
+                    keyCode: settings.shortcutKeyCode,
+                    modifiers: settings.shortcutModifiers
+                ) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("macOS reserves this for **\(conflict)** and handles it before VoiceSmith ever sees it.")
+                                .font(.system(size: 11))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text("Either pick a different combination above, or turn the system one off in Keyboard Shortcuts to free it up.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Open Keyboard Shortcuts…") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
             }
         }
         .formStyle(.grouped)

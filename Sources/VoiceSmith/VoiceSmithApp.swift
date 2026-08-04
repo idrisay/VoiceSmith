@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 @main
@@ -9,7 +10,8 @@ struct VoiceSmithApp: App {
         MenuBarExtra {
             MenuBarContent(
                 controller: delegate.controller,
-                settings: delegate.settings
+                settings: delegate.settings,
+                delegate: delegate
             )
         } label: {
             Image(systemName: delegate.menuBarSymbol)
@@ -27,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     lazy var controller = AppController(settings: settings, store: store)
 
     @Published var menuBarSymbol = "mic"
+    /// Non-nil when the configured shortcut will never reach us.
+    @Published var shortcutProblem: String?
 
     private var phaseObserver: Any?
 
@@ -49,7 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             MainActor.assumeIsolated { self?.registerShortcut() }
         }
 
-        installEscapeMonitor()
         observePhase()
 
         Delivery.requestNotificationPermission()
@@ -63,26 +66,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationWillTerminate(_ notification: Notification) {
         GlobalShortcut.shared.unregister()
+        GlobalShortcut.cancel.unregister()
     }
 
     // MARK: - Shortcut
 
     private func registerShortcut() {
-        GlobalShortcut.shared.register(
+        let claimed = GlobalShortcut.shared.register(
             keyCode: settings.shortcutKeyCode,
             modifiers: settings.shortcutModifiers
         ) { [weak self] in
             self?.controller.toggle()
         }
+
+        let reserved = GlobalShortcut.systemConflict(
+            keyCode: settings.shortcutKeyCode,
+            modifiers: settings.shortcutModifiers
+        )
+
+        // A reserved combination registers "successfully" but the system handler
+        // wins, so check both conditions.
+        if let reserved {
+            shortcutProblem = "macOS uses this shortcut for \(reserved)."
+        } else if !claimed {
+            shortcutProblem = "Another app already uses this shortcut."
+        } else {
+            shortcutProblem = nil
+        }
     }
 
-    /// Escape cancels a recording from anywhere, without needing key focus in the panel.
-    private func installEscapeMonitor() {
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.keyCode == 53 else { return event } // kVK_Escape
-            guard self.controller.phase.isBusy else { return event }
-            self.controller.cancel()
-            return nil
+    /// Escape cancels, from whatever app the user is actually in.
+    ///
+    /// Claimed only while a session is live, because grabbing bare Escape
+    /// system-wide the rest of the time would break every other app's use of it.
+    private func setEscapeCapture(active: Bool) {
+        guard active else {
+            GlobalShortcut.cancel.unregister()
+            return
+        }
+        GlobalShortcut.cancel.register(
+            keyCode: UInt32(kVK_Escape),
+            modifiers: 0
+        ) { [weak self] in
+            self?.controller.cancel()
         }
     }
 
@@ -96,6 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             case .failed: self.menuBarSymbol = "mic.badge.xmark"
             default: self.menuBarSymbol = "mic"
             }
+            // Bare Escape is only ours while something is actually in flight.
+            self.setEscapeCapture(active: phase.isBusy)
+            // Let SwiftUI lay the new state out before measuring it.
+            DispatchQueue.main.async { WindowRouter.shared.resizeRecordingPanel() }
         }
     }
 }
@@ -105,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 private struct MenuBarContent: View {
     @ObservedObject var controller: AppController
     @ObservedObject var settings: AppSettings
+    @ObservedObject var delegate: AppDelegate
 
     var body: some View {
         Button(controller.phase == .recording ? "Stop Recording" : "Start Recording") {
@@ -136,6 +167,12 @@ private struct MenuBarContent: View {
             .keyboardShortcut("h")
 
         Divider()
+
+        if let problem = delegate.shortcutProblem {
+            Button("⚠︎ \(problem) Choose another…") {
+                WindowRouter.shared.openSettings(.shortcuts)
+            }
+        }
 
         Text(statusLine)
 

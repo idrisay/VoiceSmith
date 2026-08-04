@@ -78,9 +78,11 @@ final class AppSettings: ObservableObject {
             "audioRetention": AudioRetention.deleteAfterTranscription.rawValue,
             "maxRecordingSeconds": 600,
             "hasCompletedOnboarding": false,
-            // ⌥⌘Space — kVK_Space is 49, optionKey|cmdKey per Carbon.
+            // ⌃⌥⌘Space. kVK_Space is 49; 6400 = controlKey|optionKey|cmdKey.
+            // Not ⌥⌘Space: macOS reserves that for "Show Finder search window",
+            // so it opened Finder instead of recording.
             "shortcutKeyCode": 49,
-            "shortcutModifiers": 2304,
+            "shortcutModifiers": 6400,
         ])
 
         speechProvider = SpeechProviderKind(rawValue: defaults.string(forKey: "speechProvider") ?? "") ?? .appleSpeech

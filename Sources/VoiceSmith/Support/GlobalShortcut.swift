@@ -6,15 +6,27 @@ import Foundation
 /// Accessibility permission — the app stays usable for clipboard-only workflows
 /// even when the user declines that prompt.
 final class GlobalShortcut {
-    static let shared = GlobalShortcut()
+    /// The record/stop shortcut the user configures.
+    static let shared = GlobalShortcut(id: 1)
+    /// Bare Escape, registered only while recording. It has to be a system hot key
+    /// rather than a local event monitor: the recording panel never activates the
+    /// app, so a local monitor would never see the key press.
+    static let cancel = GlobalShortcut(id: 2)
 
+    private let id: UInt32
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var onFire: (() -> Void)?
 
-    private init() {}
+    private init(id: UInt32) {
+        self.id = id
+    }
 
-    func register(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
+    /// Returns false when the combination couldn't be claimed — normally because
+    /// macOS or another app already owns it. The caller surfaces that rather than
+    /// leaving the user with a shortcut that silently does someone else's thing.
+    @discardableResult
+    func register(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) -> Bool {
         unregister()
         onFire = action
 
@@ -39,7 +51,7 @@ final class GlobalShortcut {
                     nil,
                     &hotKeyID
                 )
-                guard hotKeyID.id == 1 else { return noErr }
+                guard hotKeyID.id == shortcut.id else { return noErr }
 
                 DispatchQueue.main.async { shortcut.onFire?() }
                 return noErr
@@ -50,8 +62,8 @@ final class GlobalShortcut {
             &handlerRef
         )
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x5653_4D54), id: 1) // 'VSMT'
-        RegisterEventHotKey(
+        let hotKeyID = EventHotKeyID(signature: OSType(0x5653_4D54), id: id) // 'VSMT'
+        let status = RegisterEventHotKey(
             keyCode,
             modifiers,
             hotKeyID,
@@ -59,6 +71,44 @@ final class GlobalShortcut {
             0,
             &hotKeyRef
         )
+        return status == noErr && hotKeyRef != nil
+    }
+
+    /// Combinations macOS reserves for itself. Registering one appears to succeed
+    /// but the system handler runs first, so the user presses the shortcut and
+    /// gets Spotlight or a Finder window instead of VoiceSmith.
+    ///
+    /// `⌥⌘Space` — the obvious choice, and VoiceSmith's original default — is
+    /// "Show Finder search window", which is exactly why it yanked users to the
+    /// desktop on every press.
+    static func systemConflict(keyCode: UInt32, modifiers: UInt32) -> String? {
+        let cmd = UInt32(cmdKey), opt = UInt32(optionKey), ctrl = UInt32(controlKey)
+        let shift = UInt32(shiftKey)
+
+        switch (Int(keyCode), modifiers) {
+        case (kVK_Space, cmd):
+            return "Spotlight search"
+        case (kVK_Space, opt | cmd):
+            return "Show Finder search window"
+        case (kVK_Space, ctrl | cmd):
+            return "Emoji & Symbols"
+        case (kVK_Space, ctrl):
+            return "Select the previous input source"
+        case (kVK_Space, ctrl | opt):
+            return "Select the next input source"
+        case (kVK_Space, shift | cmd):
+            return "Spotlight (Finder search) on some layouts"
+        case (kVK_ANSI_D, opt | cmd):
+            return "Show or hide the Dock"
+        case (kVK_Tab, cmd), (kVK_Tab, shift | cmd):
+            return "Application switcher"
+        case (kVK_Escape, opt | cmd):
+            return "Force Quit"
+        case (kVK_ANSI_Q, shift | cmd):
+            return "Log out"
+        default:
+            return nil
+        }
     }
 
     func unregister() {

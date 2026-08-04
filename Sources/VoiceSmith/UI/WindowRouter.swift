@@ -45,27 +45,41 @@ final class WindowRouter: ObservableObject {
             )
             let hosting = NSHostingController(rootView: view)
 
+            // Borderless, not titled. A titled panel takes key status, which
+            // activates the app — and activating an accessory app makes macOS
+            // jump to whichever Space holds its other windows. That's what
+            // yanked the user to the main desktop on every shortcut press.
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 340, height: 160),
-                styleMask: [.nonactivatingPanel, .fullSizeContentView, .titled],
+                contentRect: NSRect(x: 0, y: 0, width: 280, height: 64),
+                styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             panel.contentViewController = hosting
-            panel.titleVisibility = .hidden
-            panel.titlebarAppearsTransparent = true
             panel.isMovableByWindowBackground = true
-            panel.level = .floating
+            // Above normal windows but below the menu bar's own panels.
+            panel.level = .statusBar
             panel.hidesOnDeactivate = false
             panel.isFloatingPanel = true
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            // Only take key focus if something inside genuinely needs typing —
+            // otherwise the user's text field keeps the caret, which is what
+            // insertion depends on.
+            panel.becomesKeyOnlyIfNeeded = true
+            // Show on the Space the user is already looking at; never drag them
+            // to another one, and stay out of ⌘` window cycling.
+            panel.collectionBehavior = [
+                .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
+            ]
             panel.backgroundColor = .clear
             panel.isOpaque = false
-            panel.standardWindowButton(.closeButton)?.isHidden = true
-            panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            panel.standardWindowButton(.zoomButton)?.isHidden = true
+            panel.hasShadow = true
             recordingPanel = panel
         }
+
+        // Size to whatever the current state needs before placing it.
+        recordingPanel?.setContentSize(
+            recordingPanel?.contentViewController?.view.fittingSize ?? NSSize(width: 280, height: 64)
+        )
 
         position(recordingPanel!, near: caretRect)
         recordingPanel?.orderFrontRegardless()
@@ -73,6 +87,27 @@ final class WindowRouter: ObservableObject {
 
     func hideRecordingPanel() {
         recordingPanel?.orderOut(nil)
+    }
+
+    /// The pill changes size as it moves through recording → transcribing →
+    /// improving. A borderless window doesn't track its content's fitting size,
+    /// so resize explicitly, keeping the top edge and centre fixed — otherwise
+    /// the popup jumps around under the caret mid-sentence.
+    func resizeRecordingPanel() {
+        guard let panel = recordingPanel, panel.isVisible,
+              let view = panel.contentViewController?.view
+        else { return }
+
+        let fitting = view.fittingSize
+        guard fitting.width > 1, fitting.height > 1 else { return }
+
+        let previous = panel.frame
+        panel.setContentSize(fitting)
+
+        var frame = panel.frame
+        frame.origin.x = previous.midX - frame.width / 2
+        frame.origin.y = previous.maxY - frame.height
+        panel.setFrame(frame, display: true, animate: false)
     }
 
     private func position(_ window: NSWindow, near caretRect: CGRect?) {
