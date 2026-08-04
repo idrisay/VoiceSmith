@@ -62,7 +62,15 @@ Features:
 
 **Default: double-tap `Shift`.** No chord to learn, nothing to collide with a system shortcut, and both hands stay where they were.
 
-A modifier tap cannot be a system hot key — `RegisterEventHotKey` needs a real key — so this is detected by watching modifier-flag changes, which requires Accessibility permission. It reports when it can't be armed rather than leaving the user tapping at nothing.
+A modifier tap cannot be a system hot key — `RegisterEventHotKey` needs a real key — so this is detected by watching modifier-flag changes, which requires Accessibility permission.
+
+Because the primary trigger depends on it, a missing grant means nothing works at all. So:
+
+- VoiceSmith asks for the permission outright on launch rather than leaving a warning buried in a menu.
+- It keeps retrying until the grant takes. macOS sends no notification when permission is granted and the grant cannot be picked up retroactively, so without this, granting appears to do nothing until the app is restarted.
+- The current state is recorded where it can be inspected from outside the app, because a menu-bar app has nowhere obvious to surface it and "is Accessibility actually live?" is the first question whenever the trigger seems dead.
+
+**Development builds must use a stable code-signing identity.** macOS ties permission grants to the signature, and an ad-hoc signature is derived from the binary's contents — so it changes on every build, macOS treats each rebuild as a different app, and the grants silently stop applying while a stale entry stays ticked in System Settings. The symptom is Accessibility that is "already enabled" but doesn't work.
 
 Detection rules, so it never fires while typing:
 

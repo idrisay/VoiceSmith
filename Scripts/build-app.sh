@@ -31,13 +31,29 @@ cp "$BINARY" "$APP/Contents/MacOS/VoiceSmith"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-# Ad-hoc signature. Enough for local use — macOS keys microphone, speech, and
-# Accessibility grants to the signed bundle, so an unsigned build would re-prompt
-# on every launch. Distribution needs a Developer ID identity and notarisation.
-echo "==> codesign (ad-hoc)"
-codesign --force --deep --sign - \
-  --identifier com.voicesmith.app \
-  "$APP" >/dev/null 2>&1
+# macOS keys permission grants (Accessibility, microphone, speech) to the app's
+# code signature. An ad-hoc signature is derived from the binary's contents, so
+# it CHANGES ON EVERY BUILD — macOS then treats each rebuild as a different app
+# and silently drops the grants, leaving a stale entry ticked in System Settings
+# that no longer matches. That is why Accessibility keeps needing re-granting.
+#
+# A self-signed identity fixes it permanently: the signature stays stable across
+# builds, so the grants stick. Create one with Scripts/create-signing-identity.sh.
+IDENTITY="VoiceSmith Dev"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+  echo "==> codesign ($IDENTITY — stable, permissions persist)"
+  codesign --force --deep --sign "$IDENTITY" \
+    --identifier com.voicesmith.app \
+    "$APP" >/dev/null 2>&1
+else
+  echo "==> codesign (ad-hoc)"
+  codesign --force --deep --sign - \
+    --identifier com.voicesmith.app \
+    "$APP" >/dev/null 2>&1
+  echo "    note: ad-hoc signature changes every build, so macOS will ask for"
+  echo "    Accessibility again after each rebuild. Run this once to stop that:"
+  echo "      ./Scripts/create-signing-identity.sh"
+fi
 
 echo "==> built $APP"
 

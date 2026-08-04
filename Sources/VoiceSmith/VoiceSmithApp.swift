@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var doubleShiftProblem: String?
 
     private var phaseObserver: Any?
+    private var accessibilityRetry: Timer?
+    private var hasPromptedForAccessibility = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar utility: no Dock icon, no main window.
@@ -108,15 +110,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func registerDoubleShift() {
         guard settings.triggerOnDoubleShift else {
             DoubleTapShortcut.shared.disable()
+            accessibilityRetry?.invalidate()
+            accessibilityRetry = nil
             doubleShiftProblem = nil
             return
         }
+
         let armed = DoubleTapShortcut.shared.enable { [weak self] in
             self?.controller.toggle()
         }
-        doubleShiftProblem = armed
-            ? nil
-            : "Double-tap Shift needs Accessibility access."
+
+        // Recorded so the state is inspectable from outside the app — a menu-bar
+        // app has nowhere obvious to surface this, and "is Accessibility actually
+        // live?" is the first question whenever the trigger seems dead.
+        UserDefaults.standard.set(Delivery.hasAccessibilityPermission, forKey: "diagnostic.accessibilityTrusted")
+        UserDefaults.standard.set(armed, forKey: "diagnostic.doubleTapArmed")
+        NSLog("VoiceSmith: accessibility=\(Delivery.hasAccessibilityPermission) doubleTapArmed=\(armed)")
+
+        if armed {
+            doubleShiftProblem = nil
+            accessibilityRetry?.invalidate()
+            accessibilityRetry = nil
+        } else {
+            doubleShiftProblem = "Double-tap Shift needs Accessibility access."
+            startAccessibilityRetry()
+
+            // Double-tap is the primary way into the app, so an un-granted
+            // permission means nothing works at all. Ask outright — once per
+            // launch — rather than leaving a warning buried in the menu.
+            if !hasPromptedForAccessibility {
+                hasPromptedForAccessibility = true
+                Delivery.requestAccessibilityPermission()
+            }
+        }
+    }
+
+    /// Granting Accessibility sends no notification, and the grant can't be
+    /// picked up retroactively — so keep trying to arm until it takes. Without
+    /// this, granting permission appears to do nothing until the app restarts.
+    private func startAccessibilityRetry() {
+        guard accessibilityRetry == nil else { return }
+        accessibilityRetry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.settings.triggerOnDoubleShift else { return }
+                guard Delivery.hasAccessibilityPermission else { return }
+                self.registerDoubleShift()
+            }
+        }
     }
 
     /// Escape cancels, from whatever app the user is actually in.
