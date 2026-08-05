@@ -132,6 +132,14 @@ Cloud providers use **your own API key**, stored in the macOS Keychain and sent 
 
 For a fully offline setup, pair **Apple Speech** with **Ollama**.
 
+### Languages
+
+Groq's `whisper-large-v3-turbo` handles **99 languages**, and language is set to **Detect automatically** by default — VoiceSmith sends no language hint, so you can switch language mid-day without touching a setting. It transcribes what you said in the language you said it; turbo does not translate.
+
+**Settings › General › Language** lists twelve for pinning explicitly — English (US/UK), German, French, Spanish, Italian, Portuguese (Brazil), Dutch, Turkish, Japanese, Korean, Chinese (Simplified). Pin one when auto-detection keeps guessing wrong, usually on short recordings. Any other language still works on auto.
+
+Accuracy is uneven across languages — expect less from low-resource ones than from English.
+
 ### Modes
 
 Improvement style is a mode: Professional, Friendly, Concise, Detailed, Email, Meeting Notes, Markdown, or Verbatim. Duplicate any of them in **Settings › Modes** to write your own prompt.
