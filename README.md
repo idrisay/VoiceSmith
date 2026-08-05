@@ -35,6 +35,10 @@ No API key is required to get started — the default setup transcribes on-devic
 
 ## Install
 
+There's no pre-built download yet, so VoiceSmith is compiled on your own Mac. It takes two commands. No GitHub account is needed — this repository is public.
+
+### With Git
+
 ```bash
 git clone https://github.com/idrisay/VoiceSmith.git
 cd VoiceSmith
@@ -46,7 +50,40 @@ cd VoiceSmith
 ./Scripts/build-app.sh release run
 ```
 
-`VoiceSmith.app` is built into `build/`. Move it to `/Applications` if you want it permanently, and rebuild with `./Scripts/build-app.sh release` after pulling changes.
+### Without Git
+
+Nothing here needs a Git checkout — the build works fine from a plain folder.
+
+1. Download [**the ZIP**](https://github.com/idrisay/VoiceSmith/archive/refs/heads/main.zip) and unzip it. You'll get a folder called `VoiceSmith-main`.
+2. Open **Terminal** (⌘Space, type "Terminal"). Type `cd` followed by a space, then **drag the unzipped folder onto the Terminal window** — it fills in the path for you. Press Return.
+3. Run these two lines, one at a time:
+
+   ```bash
+   ./Scripts/create-signing-identity.sh
+   ./Scripts/build-app.sh release run
+   ```
+
+If the second command complains about missing developer tools, run `xcode-select --install`, accept the macOS installer, and try again.
+
+To update later, download a fresh ZIP and repeat — or switch to the Git route, where `git pull` and a rebuild is enough.
+
+### Afterwards
+
+`VoiceSmith.app` is built into `build/`. Drag it to `/Applications` if you want it permanently, and rebuild with `./Scripts/build-app.sh release` after pulling changes.
+
+A setup assistant runs on first launch and walks you through providers and permissions.
+
+### If someone hands you a built copy
+
+An app built on someone else's Mac carries *their* local signature, which your Mac doesn't trust. macOS will refuse to open it on the first try.
+
+Right-click the app and choose **Open** — that offers a launch-anyway prompt that double-clicking doesn't. If macOS blocks it regardless, open **System Settings › Privacy & Security**, scroll to the message about VoiceSmith, and click **Open Anyway**. Should both fail, clear the download flag directly:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/VoiceSmith.app
+```
+
+Building it yourself avoids all of this, and is the recommended route.
 
 ### Why the signing step matters
 
