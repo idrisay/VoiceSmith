@@ -20,6 +20,8 @@ Everything is stored on your Mac. There's no account, no sign-in, and no server 
 
 `Escape` cancels and discards the recording.
 
+**The trigger is yours to change.** In **Settings › Shortcut** you can switch the double-tap off and record any key combination you like for start/stop, or keep both. Worth doing if you live in a JetBrains IDE — those use double-tap `Shift` themselves, so until you change it, both will fire.
+
 The transcript is *cleaned*, not rewritten: grammar, punctuation, filler words, and false starts are fixed, but the meaning, the facts, and your voice stay yours.
 
 ---
