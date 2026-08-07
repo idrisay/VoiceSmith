@@ -48,13 +48,25 @@ It also clears the quarantine flag macOS puts on downloads — which is the reas
 
 ### Or download the .dmg
 
+> [!WARNING]
+> macOS blocks the first launch, and the dialog it shows offers **Move to Bin**.
+> Clicking that deletes the app. The button you want is **Done**.
+
 1. Grab `VoiceSmith-<version>.dmg` from the [latest release](https://github.com/idrisay/VoiceSmith/releases/latest)
 2. Open it and drag **VoiceSmith** onto **Applications**
-3. Launch it. macOS will block it: *"Apple could not verify VoiceSmith is free of malware."* Open **System Settings › Privacy & Security**, scroll to the message about VoiceSmith, and click **Open Anyway**
+3. Launch it. A dialog says *"VoiceSmith" Not Opened — Apple could not verify VoiceSmith is free of malware.* Click **Done**
+4. Open **System Settings › Privacy & Security**, scroll down to *"VoiceSmith" was blocked to protect your Mac*, and click **Open Anyway**. Authenticate
+5. Launch it again and click **Open Anyway** in the dialog that follows
 
-Step 3 is once per install, not once per launch. On macOS 15 and later there's no Control-click shortcut around it — Apple removed that.
+Steps 3–5 are once per install, not once per launch. On macOS 15 and later there's no Control-click shortcut around them — Apple removed it.
 
-The block happens because VoiceSmith isn't **notarised**: that needs a paid Apple Developer Program membership, which this project doesn't have yet. It says nothing about what the app does; the source is right here and the builds are produced by [a GitHub Actions workflow](.github/workflows/release.yml) you can read.
+Already clicked Move to Bin? The app is fine. Restore it from the Bin with right-click → **Put Back**, then either follow the steps above or clear the download flag directly:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/VoiceSmith.app
+```
+
+The block happens because VoiceSmith isn't **notarised**: that needs a paid Apple Developer Program membership, which this project doesn't have yet. It says nothing about what the app does — the signature on the download is valid and intact, it simply isn't one Apple has countersigned. The source is right here and the builds are produced by [a GitHub Actions workflow](.github/workflows/release.yml) you can read.
 
 ### Updating
 

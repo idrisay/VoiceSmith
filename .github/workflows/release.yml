@@ -79,11 +79,23 @@ jobs:
 
           **Or download the .dmg below** and drag VoiceSmith to Applications.
 
-          The first launch is blocked — VoiceSmith is not notarised by Apple
-          yet, so macOS says it "could not verify" the app. Open **System
-          Settings › Privacy & Security**, scroll to the message about
-          VoiceSmith, and click **Open Anyway**. Once only. The one-line
-          installer avoids this step entirely.
+          > [!WARNING]
+          > macOS blocks the first launch, and the dialog offers **Move to Bin**.
+          > That deletes the app. Click **Done** instead.
+
+          VoiceSmith is not notarised by Apple yet, so macOS says it "could not
+          verify" the app. The signature is valid and intact — it simply isn't
+          one Apple has countersigned. To get past it:
+
+          1. On the *"VoiceSmith" Not Opened* dialog, click **Done**
+          2. Open **System Settings › Privacy & Security**, scroll to
+             *"VoiceSmith" was blocked to protect your Mac*, click **Open
+             Anyway**, and authenticate
+          3. Launch again and click **Open Anyway**
+
+          Once per install, not per launch. The one-line installer avoids all of
+          it. Already clicked Move to Bin? Restore the app from the Bin with
+          right-click › **Put Back** — nothing about it is broken.
 
           VoiceSmith runs in the menu bar — no Dock icon, no window.
 
