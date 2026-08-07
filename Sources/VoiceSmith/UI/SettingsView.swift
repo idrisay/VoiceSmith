@@ -79,9 +79,10 @@ private struct GeneralPane: View {
                     }
                 }
                 Picker("Language", selection: $settings.language) {
-                    Text("Detect automatically").tag("auto")
+                    Text(DictationLanguage.name(for: DictationLanguage.auto))
+                        .tag(DictationLanguage.auto)
                     Divider()
-                    ForEach(Self.languages, id: \.0) { code, name in
+                    ForEach(DictationLanguage.pinnable, id: \.code) { code, name in
                         Text(name).tag(code)
                     }
                 }
@@ -96,12 +97,6 @@ private struct GeneralPane: View {
         .formStyle(.grouped)
     }
 
-    static let languages: [(String, String)] = [
-        ("en-US", "English (US)"), ("en-GB", "English (UK)"), ("de-DE", "German"),
-        ("fr-FR", "French"), ("es-ES", "Spanish"), ("it-IT", "Italian"),
-        ("pt-BR", "Portuguese (Brazil)"), ("nl-NL", "Dutch"), ("tr-TR", "Turkish"),
-        ("ja-JP", "Japanese"), ("ko-KR", "Korean"), ("zh-CN", "Chinese (Simplified)"),
-    ]
 }
 
 // MARK: - Providers

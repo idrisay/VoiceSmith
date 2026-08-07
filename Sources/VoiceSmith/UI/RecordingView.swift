@@ -1,8 +1,15 @@
 import SwiftUI
 
 /// The floating popup. Deliberately small: a mic, a live sound meter, a timer,
-/// and a stop button. Everything else — provider names, mode, destination — is
-/// in the menu bar and Settings, not in the user's face mid-sentence.
+/// a language picker, and a stop button. Everything else — provider names, mode,
+/// destination — is in the menu bar and Settings, not in the user's face
+/// mid-sentence.
+///
+/// Language earns its place here because it is the one setting whose right value
+/// is only apparent once you have started speaking: auto-detection reads the
+/// audio, and on a short or accented recording it guesses wrong. The transcript
+/// is not requested until recording stops, so choosing a language mid-sentence
+/// still applies to the recording in progress.
 ///
 /// Once recording stops the pipeline runs on its own: transcribe → improve →
 /// insert into the field that had focus. The popup only reports progress.
@@ -38,6 +45,10 @@ struct RecordingView: View {
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+
+            Divider().frame(height: 22)
+
+            LanguageMenu(settings: settings)
 
             Divider().frame(height: 22)
 
@@ -97,6 +108,50 @@ struct RecordingView: View {
     private func timeString(_ interval: TimeInterval) -> String {
         let total = Int(interval)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+// MARK: - Language
+
+/// Bound straight to the setting Settings shows, so a choice made mid-recording
+/// is the same choice made there and stays put until it's changed again. The
+/// label stays a badge — "Auto", "EN", "TR" — because the full name would crowd
+/// out the sound meter, and the menu spells it out anyway.
+private struct LanguageMenu: View {
+    @ObservedObject var settings: AppSettings
+
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Picker("Language", selection: $settings.language) {
+                Text(DictationLanguage.name(for: DictationLanguage.auto))
+                    .tag(DictationLanguage.auto)
+                Divider()
+                ForEach(DictationLanguage.pinnable, id: \.code) { code, name in
+                    Text(name).tag(code)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "globe")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(DictationLanguage.badge(for: settings.language))
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(Capsule().fill(Color.primary.opacity(hovering ? 0.1 : 0.05)))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Language — \(DictationLanguage.name(for: settings.language))")
     }
 }
 

@@ -159,6 +159,36 @@ enum TextProviderKind: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+// MARK: - Dictation language
+
+/// The languages offered for pinning. Auto-detection covers far more than this
+/// — the point of the list is the cases where detection guesses wrong, which is
+/// most often on short recordings and on English spoken with a strong accent.
+///
+/// Shared by Settings and the recording popup, so a language can be pinned
+/// before speaking or mid-recording once it's clear detection has gone astray.
+enum DictationLanguage {
+    static let auto = "auto"
+
+    static let pinnable: [(code: String, name: String)] = [
+        ("en-US", "English (US)"), ("en-GB", "English (UK)"), ("de-DE", "German"),
+        ("fr-FR", "French"), ("es-ES", "Spanish"), ("it-IT", "Italian"),
+        ("pt-BR", "Portuguese (Brazil)"), ("nl-NL", "Dutch"), ("tr-TR", "Turkish"),
+        ("ja-JP", "Japanese"), ("ko-KR", "Korean"), ("zh-CN", "Chinese (Simplified)"),
+    ]
+
+    static func name(for code: String) -> String {
+        code == auto
+            ? "Detect automatically"
+            : pinnable.first { $0.code == code }?.name ?? code
+    }
+
+    /// What fits in the recording pill: "Auto", "EN", "TR".
+    static func badge(for code: String) -> String {
+        code == auto ? "Auto" : String(code.prefix(2)).uppercased()
+    }
+}
+
 // MARK: - Improvement modes
 
 struct ImprovementMode: Identifiable, Codable, Hashable {
