@@ -4,25 +4,36 @@
 #   ./Scripts/build-app.sh            debug build
 #   ./Scripts/build-app.sh release    optimised build
 #   ./Scripts/build-app.sh release run   build, then launch
+#   ./Scripts/build-app.sh release universal   Intel + Apple Silicon
+#
+# Scripts/release.sh drives this to produce what ships; it passes `universal`
+# and sets VOICESMITH_SIGN_IDENTITY, then re-signs with release settings.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 CONFIG="debug"
 RUN="no"
+ARCHS=()
 for arg in "$@"; do
   case "$arg" in
-    release) CONFIG="release" ;;
-    debug)   CONFIG="debug" ;;
-    run)     RUN="yes" ;;
+    release)   CONFIG="release" ;;
+    debug)     CONFIG="debug" ;;
+    run)       RUN="yes" ;;
+    universal) ARCHS=(--arch arm64 --arch x86_64) ;;
   esac
 done
 
 APP="build/VoiceSmith.app"
 
-echo "==> swift build -c $CONFIG"
-swift build -c "$CONFIG"
-BINARY="$(swift build -c "$CONFIG" --show-bin-path)/VoiceSmith"
+echo "==> swift build -c $CONFIG ${ARCHS[*]-}"
+swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"}
+BINARY="$(swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/VoiceSmith"
+
+if [ ! -f "$BINARY" ]; then
+  echo "error: swift build reported $BINARY but nothing is there" >&2
+  exit 1
+fi
 
 echo "==> assembling $APP"
 rm -rf "$APP"
@@ -40,7 +51,14 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # A self-signed identity fixes it permanently: the signature stays stable across
 # builds, so the grants stick. Create one with Scripts/create-signing-identity.sh.
 IDENTITY="VoiceSmith Dev"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+if [ -n "${VOICESMITH_SIGN_IDENTITY:-}" ]; then
+  # release.sh signs on its own terms and doesn't want a local developer
+  # certificate baked into something other people download.
+  echo "==> codesign ($VOICESMITH_SIGN_IDENTITY)"
+  codesign --force --sign "$VOICESMITH_SIGN_IDENTITY" \
+    --identifier com.voicesmith.app \
+    "$APP" >/dev/null 2>&1
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
   echo "==> codesign ($IDENTITY — stable, permissions persist)"
   codesign --force --deep --sign "$IDENTITY" \
     --identifier com.voicesmith.app \

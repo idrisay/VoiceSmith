@@ -1,0 +1,84 @@
+# Publishes a downloadable build when a version tag is pushed.
+#
+#   1. Bump CFBundleShortVersionString in Resources/Info.plist
+#   2. git commit
+#   3. git tag v1.1 && git push origin v1.1
+#
+# The tag and the plist must agree — the job fails early if they don't, so a
+# release can never be published under a version the app doesn't report.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macOS 15 for Xcode 16, which Package.swift needs (swift-tools-version 6.0).
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches Info.plist
+        run: |
+          PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PLIST_VERSION" != "$TAG_VERSION" ]; then
+            echo "Tag is $GITHUB_REF_NAME (version $TAG_VERSION) but Info.plist says $PLIST_VERSION." >&2
+            echo "Bump CFBundleShortVersionString, commit, and re-tag." >&2
+            exit 1
+          fi
+          echo "VERSION=$PLIST_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build and package
+        # No DEVELOPER_ID or NOTARY_PROFILE, so this signs ad-hoc. To sign for
+        # real, import a Developer ID certificate into a temporary keychain here
+        # and set both from repository secrets.
+        run: ./Scripts/release.sh
+
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Install
+
+          **One line, nothing to click:**
+
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/idrisay/VoiceSmith/main/install.sh | bash
+          ```
+
+          **Or download the .dmg below** and drag VoiceSmith to Applications.
+
+          The first launch is blocked — VoiceSmith is not notarised by Apple
+          yet, so macOS says it "could not verify" the app. Open **System
+          Settings › Privacy & Security**, scroll to the message about
+          VoiceSmith, and click **Open Anyway**. Once only. The one-line
+          installer avoids this step entirely.
+
+          VoiceSmith runs in the menu bar — no Dock icon, no window.
+
+          ## Upgrading
+
+          Re-run the installer, or replace the app in Applications.
+
+          Because the build isn't signed with a Developer ID certificate, macOS
+          treats each version as a different app and **drops the Accessibility
+          grant on update**. If double-tap Shift stops working, open System
+          Settings › Privacy & Security › Accessibility, remove VoiceSmith with
+          the − button, and add it again with +. A stale entry looks enabled
+          but grants nothing.
+          NOTES
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "VoiceSmith $VERSION" \
+            --notes-file notes.md \
+            dist/VoiceSmith-"$VERSION".dmg \
+            dist/VoiceSmith.zip

@@ -28,76 +28,81 @@ The transcript is *cleaned*, not rewritten: grammar, punctuation, filler words, 
 
 ## Requirements
 
-- macOS 14 or later
-- Xcode command line tools (`xcode-select --install`)
+- macOS 14 or later, Intel or Apple Silicon
 
-No API key is required to get started — the default setup transcribes on-device with Apple Speech.
+That's it. No Xcode and no developer tools — those are only needed if you build from source. No API key either: the default setup transcribes on-device with Apple Speech.
 
 ---
 
 ## Install
 
-There's no pre-built download yet, so VoiceSmith is compiled on your own Mac. It takes two commands. No GitHub account is needed — this repository is public.
+### One line
 
-### With Git
+```bash
+curl -fsSL https://raw.githubusercontent.com/idrisay/VoiceSmith/main/install.sh | bash
+```
+
+Downloads the [latest release](https://github.com/idrisay/VoiceSmith/releases/latest), installs it to `/Applications`, and launches it. A setup assistant takes it from there.
+
+It also clears the quarantine flag macOS puts on downloads — which is the reason this route is smoother than the next one, and the reason you should [read the script](install.sh) before piping it to a shell, as with any `curl | bash`. It's about forty lines.
+
+### Or download the .dmg
+
+1. Grab `VoiceSmith-<version>.dmg` from the [latest release](https://github.com/idrisay/VoiceSmith/releases/latest)
+2. Open it and drag **VoiceSmith** onto **Applications**
+3. Launch it. macOS will block it: *"Apple could not verify VoiceSmith is free of malware."* Open **System Settings › Privacy & Security**, scroll to the message about VoiceSmith, and click **Open Anyway**
+
+Step 3 is once per install, not once per launch. On macOS 15 and later there's no Control-click shortcut around it — Apple removed that.
+
+The block happens because VoiceSmith isn't **notarised**: that needs a paid Apple Developer Program membership, which this project doesn't have yet. It says nothing about what the app does; the source is right here and the builds are produced by [a GitHub Actions workflow](.github/workflows/release.yml) you can read.
+
+### Updating
+
+Re-run the one-line installer, or drop in a new `.dmg`.
+
+One wrinkle, from the same missing certificate: macOS ties permission grants to an app's **code signature**, and an unsigned build's signature changes with every version. So macOS treats an update as a different app and **drops the Accessibility grant** — while leaving a stale entry ticked in System Settings that no longer matches anything. If double-tap `Shift` stops working after an update, open **System Settings › Privacy & Security › Accessibility**, remove VoiceSmith with **−**, and add it back with **+**.
+
+### Build from source
+
+Not required — but it's the route to take if you want to change something. Needs the Xcode command line tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/idrisay/VoiceSmith.git
 cd VoiceSmith
 
-# One time: create a stable local signing identity (see below for why)
+# One time: a stable local signing identity, so macOS keeps your
+# permission grants across rebuilds (see below)
 ./Scripts/create-signing-identity.sh
 
 # Build and launch
 ./Scripts/build-app.sh release run
 ```
 
-### Without Git
+`VoiceSmith.app` lands in `build/`. Drag it to `/Applications` to keep it.
 
-Nothing here needs a Git checkout — the build works fine from a plain folder.
+Without a Git checkout: download [the ZIP](https://github.com/idrisay/VoiceSmith/archive/refs/heads/main.zip), unzip it, then in **Terminal** type `cd` and a space, drag the unzipped folder onto the window, press Return, and run the same two commands.
 
-1. Download [**the ZIP**](https://github.com/idrisay/VoiceSmith/archive/refs/heads/main.zip) and unzip it. You'll get a folder called `VoiceSmith-main`.
-2. Open **Terminal** (⌘Space, type "Terminal"). Type `cd` followed by a space, then **drag the unzipped folder onto the Terminal window** — it fills in the path for you. Press Return.
-3. Run these two lines, one at a time:
+#### Why the signing step matters when building
 
-   ```bash
-   ./Scripts/create-signing-identity.sh
-   ./Scripts/build-app.sh release run
-   ```
+The update wrinkle above applies with every rebuild, not just every release — a rebuild changes an ad-hoc signature, so grants silently stop being honoured. The symptom is Accessibility that's "already enabled" but doesn't work.
 
-If the second command complains about missing developer tools, run `xcode-select --install`, accept the macOS installer, and try again.
-
-To update later, download a fresh ZIP and repeat — or switch to the Git route, where `git pull` and a rebuild is enough.
-
-### Afterwards
-
-`VoiceSmith.app` is built into `build/`. Drag it to `/Applications` if you want it permanently, and rebuild with `./Scripts/build-app.sh release` after pulling changes.
-
-A setup assistant runs on first launch and walks you through providers and permissions.
-
-### If someone hands you a built copy
-
-An app built on someone else's Mac carries *their* local signature, which your Mac doesn't trust. macOS will refuse to open it on the first try.
-
-Right-click the app and choose **Open** — that offers a launch-anyway prompt that double-clicking doesn't. If macOS blocks it regardless, open **System Settings › Privacy & Security**, scroll to the message about VoiceSmith, and click **Open Anyway**. Should both fail, clear the download flag directly:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/VoiceSmith.app
-```
-
-Building it yourself avoids all of this, and is the recommended route.
-
-### Why the signing step matters
-
-macOS ties permission grants — Accessibility, microphone — to an app's **code signature**. An ad-hoc signature is derived from the binary's contents, so it changes on every build: macOS then treats each rebuild as a different app and silently stops honouring your grants, while leaving a stale entry ticked in System Settings that no longer matches anything. The symptom is Accessibility that's "already enabled" but doesn't work.
-
-`create-signing-identity.sh` creates a self-signed certificate in your login keychain so the signature stays stable and permissions persist across rebuilds. It's local, and undoable:
+`create-signing-identity.sh` creates a self-signed certificate in your login keychain so the signature stays stable across builds. It's local, and undoable:
 
 ```bash
 security delete-certificate -c "VoiceSmith Dev"
 ```
 
 Skip it if you like — the build falls back to ad-hoc signing and warns you.
+
+#### Publishing a release
+
+Bump `CFBundleShortVersionString` in `Resources/Info.plist`, commit, then push a matching tag:
+
+```bash
+git tag v1.1 && git push origin v1.1
+```
+
+The workflow builds a universal binary, packages the `.dmg` and `.zip`, and publishes them. It refuses to run if the tag and the plist disagree. `./Scripts/release.sh` does the same thing locally, and takes `DEVELOPER_ID` and `NOTARY_PROFILE` if a paid membership ever makes notarisation possible — at which point every warning on this page goes away.
 
 ### Permissions
 
@@ -192,7 +197,7 @@ Honest gaps, so you know what you're getting:
 
 ## Troubleshooting
 
-**Double-tap `Shift` does nothing.** Accessibility isn't active. Open the menu bar icon — if it warns about Accessibility, click it. If VoiceSmith already appears in System Settings › Privacy & Security › Accessibility, **remove it and add it again**: a stale entry from a previous build looks enabled but grants nothing.
+**Double-tap `Shift` does nothing.** Accessibility isn't active. Open the menu bar icon — if it warns about Accessibility, click it. If VoiceSmith already appears in System Settings › Privacy & Security › Accessibility, **remove it and add it again**: a stale entry left by a previous build or update looks enabled but grants nothing.
 
 **The shortcut opens a Finder window.** You pressed `⌥⌘Space`, which macOS reserves for "Show Finder search window". VoiceSmith's key combination is `⌃⌥⌘Space`, and the default trigger is double-tap `Shift`.
 

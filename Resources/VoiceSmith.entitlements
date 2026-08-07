@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Only used when signing with a Developer ID certificate, which requires
+	     the hardened runtime. The hardened runtime blocks microphone access
+	     unless the app asks for it here; the Info.plist usage string alone is
+	     not enough. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+
+	<!-- Accessibility deliberately has no entitlement. It is a TCC grant the
+	     user makes in System Settings, and posting CGEvents (Delivery.swift)
+	     needs nothing beyond that. -->
+</dict>
+</plist>
