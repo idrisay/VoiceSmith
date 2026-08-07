@@ -14,21 +14,43 @@ cd "$(dirname "$0")/.."
 
 CONFIG="debug"
 RUN="no"
-ARCHS=()
+UNIVERSAL="no"
 for arg in "$@"; do
   case "$arg" in
     release)   CONFIG="release" ;;
     debug)     CONFIG="debug" ;;
     run)       RUN="yes" ;;
-    universal) ARCHS=(--arch arm64 --arch x86_64) ;;
+    universal) UNIVERSAL="yes" ;;
   esac
 done
 
 APP="build/VoiceSmith.app"
+# Keep in step with `platforms:` in Package.swift and LSMinimumSystemVersion
+# in Resources/Info.plist.
+DEPLOYMENT_TARGET="14.0"
 
-echo "==> swift build -c $CONFIG ${ARCHS[*]-}"
-swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"}
-BINARY="$(swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/VoiceSmith"
+build_one() {
+  # --triple, not --arch. Both cross-compile, but --arch switches SwiftPM to
+  # Xcode's build system, which reads swiftLanguageMode(.v5) out of
+  # Package.swift as an empty SWIFT_VERSION on Xcode 16 and dies with
+  # "duplicate output file". --triple stays on SwiftPM's own build system,
+  # which handles it on every toolchain we build with.
+  swift build -c "$CONFIG" --triple "$1-apple-macosx$DEPLOYMENT_TARGET" >&2
+  swift build -c "$CONFIG" --triple "$1-apple-macosx$DEPLOYMENT_TARGET" --show-bin-path
+}
+
+if [ "$UNIVERSAL" = "yes" ]; then
+  echo "==> swift build -c $CONFIG (arm64 + x86_64)"
+  ARM64_BIN="$(build_one arm64)/VoiceSmith"
+  X86_64_BIN="$(build_one x86_64)/VoiceSmith"
+  BINARY="build/VoiceSmith.universal"
+  mkdir -p build
+  lipo -create "$ARM64_BIN" "$X86_64_BIN" -output "$BINARY"
+else
+  echo "==> swift build -c $CONFIG"
+  swift build -c "$CONFIG"
+  BINARY="$(swift build -c "$CONFIG" --show-bin-path)/VoiceSmith"
+fi
 
 if [ ! -f "$BINARY" ]; then
   echo "error: swift build reported $BINARY but nothing is there" >&2

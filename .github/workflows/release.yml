@@ -6,33 +6,51 @@
 #
 # The tag and the plist must agree — the job fails early if they don't, so a
 # release can never be published under a version the app doesn't report.
+#
+# Run it by hand from the Actions tab to build without publishing anything.
+# That is the way to check a change to the packaging before spending a tag.
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    # macOS 15 for Xcode 16, which Package.swift needs (swift-tools-version 6.0).
     runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the tag matches Info.plist
+      - name: Use the newest Xcode on the runner
+        # Package.swift needs swift-tools-version 6.0, and the image default
+        # is not always the newest installed. Picking the highest version
+        # keeps this working as the runner images move on.
+        run: |
+          NEWEST="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$NEWEST"
+          swift --version
+
+      - name: Read the version, and check any tag agrees with it
         run: |
           PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          echo "VERSION=$PLIST_VERSION" >> "$GITHUB_ENV"
+
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "Manual run — building $PLIST_VERSION without publishing."
+            exit 0
+          fi
+
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           if [ "$PLIST_VERSION" != "$TAG_VERSION" ]; then
             echo "Tag is $GITHUB_REF_NAME (version $TAG_VERSION) but Info.plist says $PLIST_VERSION." >&2
             echo "Bump CFBundleShortVersionString, commit, and re-tag." >&2
             exit 1
           fi
-          echo "VERSION=$PLIST_VERSION" >> "$GITHUB_ENV"
 
       - name: Build and package
         # No DEVELOPER_ID or NOTARY_PROFILE, so this signs ad-hoc. To sign for
@@ -40,7 +58,15 @@ jobs:
         # and set both from repository secrets.
         run: ./Scripts/release.sh
 
+      - name: Keep the build for inspection
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceSmith-${{ env.VERSION }}-unpublished
+          path: dist/
+
       - name: Write the release notes
+        if: github.ref_type == 'tag'
         run: |
           cat > notes.md <<'NOTES'
           ## Install
@@ -74,6 +100,7 @@ jobs:
           NOTES
 
       - name: Publish
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
