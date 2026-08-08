@@ -4,6 +4,19 @@ Each released version, newest first. The release workflow reads the section
 matching the tag and puts it at the top of the GitHub release notes, so the
 heading format matters: `## <version>`.
 
+## 1.3
+
+- **Both double-tap triggers are yours to choose.** Setup now asks which taps
+  you want, and Settings › Shortcut changes them later — `Shift`, `Control`,
+  `Option`, `Command`, or off, for dictation and for to-do capture
+  independently. `Shift` and `Option` remain the suggestions.
+- Each choice carries its own warning where it matters: macOS offers "Press
+  Control Twice" for its own Dictation, and JetBrains IDEs claim double-tap
+  `Shift`.
+- The two triggers can't share a modifier — a tap of either clears the other's
+  pending tap, so both on one key would leave neither working.
+- Existing settings carry over, including a trigger you had switched off.
+
 ## 1.2
 
 **Dictate a to-do straight into Apple Reminders.** Double-tap `Option`, say what

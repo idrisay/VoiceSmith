@@ -11,19 +11,76 @@ import Foundation
 /// One instance per modifier, each watching independently. They can't be folded
 /// into a single monitor: a tap of one modifier has to *reset* the other's
 /// pending state, or alternating Shift and Option quickly would fire both.
+/// Which modifier a double-tap trigger listens to.
+///
+/// Suggested rather than imposed: the defaults below are the ones least likely
+/// to collide, but every Mac has a different set of apps competing for the same
+/// taps, so all of them are offered and any of them can be switched off.
+enum TapModifier: String, CaseIterable, Identifiable, Codable {
+    case off, shift, control, option, command
+
+    var id: String { rawValue }
+
+    var flag: NSEvent.ModifierFlags? {
+        switch self {
+        case .off:      return nil
+        case .shift:    return .shift
+        case .control:  return .control
+        case .option:   return .option
+        case .command:  return .command
+        }
+    }
+
+    /// For pickers.
+    var displayName: String {
+        switch self {
+        case .off:      return "Off"
+        case .shift:    return "Double-tap ⇧ Shift"
+        case .control:  return "Double-tap ⌃ Control"
+        case .option:   return "Double-tap ⌥ Option"
+        case .command:  return "Double-tap ⌘ Command"
+        }
+    }
+
+    /// For running text: "double-tap ⇧".
+    var shortLabel: String {
+        switch self {
+        case .off:      return "off"
+        case .shift:    return "double-tap ⇧"
+        case .control:  return "double-tap ⌃"
+        case .option:   return "double-tap ⌥"
+        case .command:  return "double-tap ⌘"
+        }
+    }
+
+    /// What else is likely to want the same tap. Shown next to the choice
+    /// rather than hidden in documentation, because the user is picking right
+    /// then and this is what they need to decide with.
+    var caution: String? {
+        switch self {
+        case .control:
+            return "macOS offers \"Press Control Twice\" as its own Dictation shortcut. If that's on, both will fire."
+        case .shift:
+            return "JetBrains IDEs use double-tap Shift for Search Everywhere. In those apps both will fire."
+        case .command:
+            return "Some launchers use double-tap Command. Check yours before relying on it."
+        case .option, .off:
+            return nil
+        }
+    }
+}
+
 final class DoubleTapShortcut {
-    /// Double-tap Shift: start or stop dictating.
-    static let shift = DoubleTapShortcut(modifier: .shift)
-    /// Double-tap Option: capture straight to the to-do list.
-    ///
-    /// Option rather than Control: macOS offers "Press Control Twice" as a
-    /// Dictation shortcut, and two dictation triggers on one chord would be a
-    /// uniquely bad collision. Option has no system meaning when tapped alone.
-    static let option = DoubleTapShortcut(modifier: .option)
+    /// Start or stop dictating. Suggested: Shift.
+    static let dictation = DoubleTapShortcut()
+    /// Capture straight to the to-do list. Suggested: Option — it is the only
+    /// one of the four with no established meaning when tapped alone.
+    static let todo = DoubleTapShortcut()
 
-    static var all: [DoubleTapShortcut] { [.shift, .option] }
+    static var all: [DoubleTapShortcut] { [.dictation, .todo] }
 
-    let modifier: NSEvent.ModifierFlags
+    /// Nil until enabled. Assignable, because the user chooses it.
+    private(set) var modifier: NSEvent.ModifierFlags?
 
     /// Two taps must land within this window. Matches the feel of other
     /// double-tap-Shift affordances; long enough to be comfortable, short enough
@@ -36,18 +93,17 @@ final class DoubleTapShortcut {
     private var modifierIsDown = false
     private var lastTapAt: Date?
 
-    private init(modifier: NSEvent.ModifierFlags) {
-        self.modifier = modifier
-    }
+    private init() {}
 
     var isEnabled: Bool { !monitors.isEmpty }
 
     /// Returns false when Accessibility hasn't been granted, since global
     /// monitors receive nothing without it.
     @discardableResult
-    func enable(action: @escaping () -> Void) -> Bool {
+    func enable(modifier: NSEvent.ModifierFlags, action: @escaping () -> Void) -> Bool {
         disable()
         guard AXIsProcessTrusted() else { return false }
+        self.modifier = modifier
         onFire = action
 
         // Global monitors see other apps; local monitors see our own windows.
@@ -85,6 +141,7 @@ final class DoubleTapShortcut {
         }
         monitors.removeAll()
         onFire = nil
+        modifier = nil
         modifierIsDown = false
         lastTapAt = nil
     }
@@ -96,6 +153,7 @@ final class DoubleTapShortcut {
     }
 
     private func handleFlags(_ event: NSEvent) {
+        guard let modifier else { return }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let aloneNow = flags == modifier
 

@@ -41,11 +41,10 @@ final class AppSettings: ObservableObject {
     }
     /// Off by default. It costs a second model call and writes to a list the
     /// user owns, so it is opted into rather than out of.
-    /// Double-tap Option captures straight to the to-do list. On by default:
-    /// it costs nothing until used, and it is the only route to the feature
-    /// that needs no menu bar icon to find.
-    @Published var triggerTodoOnDoubleOption: Bool {
-        didSet { defaults.set(triggerTodoOnDoubleOption, forKey: "triggerTodoOnDoubleOption") }
+    /// Which modifier tap captures straight to the to-do list. Option by
+    /// default, and changeable — see `dictationTapModifier`.
+    @Published var todoTapModifier: TapModifier {
+        didSet { defaults.set(todoTapModifier.rawValue, forKey: "todoTapModifier") }
     }
     @Published var addToTaskList: Bool {
         didSet { defaults.set(addToTaskList, forKey: "addToTaskList") }
@@ -73,8 +72,13 @@ final class AppSettings: ObservableObject {
     }
     /// Double-tap Shift as the primary trigger. Needs Accessibility, since a
     /// modifier-only tap can't be a system hot key.
-    @Published var triggerOnDoubleShift: Bool {
-        didSet { defaults.set(triggerOnDoubleShift, forKey: "triggerOnDoubleShift") }
+    /// Which modifier tap starts and stops dictation. Shift by default.
+    ///
+    /// Suggested, not fixed. Which taps are free depends entirely on what else
+    /// someone runs — JetBrains claims Shift, macOS Dictation can claim Control
+    /// — so the choice belongs to the user, in onboarding or in Settings.
+    @Published var dictationTapModifier: TapModifier {
+        didSet { defaults.set(dictationTapModifier.rawValue, forKey: "dictationTapModifier") }
     }
     @Published var shortcutKeyCode: UInt32 {
         didSet { defaults.set(Int(shortcutKeyCode), forKey: "shortcutKeyCode") }
@@ -92,7 +96,7 @@ final class AppSettings: ObservableObject {
             "modeID": "professional",
             "language": "auto",
             "addToTaskList": false,
-            "triggerTodoOnDoubleOption": true,
+            "todoTapModifier": TapModifier.option.rawValue,
             "reminderListID": "",
             "copyToClipboard": true,
             "autoPaste": true,
@@ -101,7 +105,7 @@ final class AppSettings: ObservableObject {
             "audioRetention": AudioRetention.deleteAfterTranscription.rawValue,
             "maxRecordingSeconds": 600,
             "hasCompletedOnboarding": false,
-            "triggerOnDoubleShift": true,
+            "dictationTapModifier": TapModifier.shift.rawValue,
             // ⌃⌥⌘Space. kVK_Space is 49; 6400 = controlKey|optionKey|cmdKey.
             // Not ⌥⌘Space: macOS reserves that for "Show Finder search window",
             // so it opened Finder instead of recording.
@@ -116,7 +120,11 @@ final class AppSettings: ObservableObject {
         modeID = defaults.string(forKey: "modeID") ?? "professional"
         language = defaults.string(forKey: "language") ?? "auto"
         addToTaskList = defaults.bool(forKey: "addToTaskList")
-        triggerTodoOnDoubleOption = defaults.bool(forKey: "triggerTodoOnDoubleOption")
+        // Migration: both triggers used to be on/off booleans on a fixed
+        // modifier. Anyone who had switched one off keeps it off.
+        todoTapModifier = Self.storedModifier(
+            defaults, key: "todoTapModifier", legacyKey: "triggerTodoOnDoubleOption", fallback: .option
+        )
         reminderListID = defaults.string(forKey: "reminderListID") ?? ""
         copyToClipboard = defaults.bool(forKey: "copyToClipboard")
         autoPaste = defaults.bool(forKey: "autoPaste")
@@ -125,7 +133,9 @@ final class AppSettings: ObservableObject {
         audioRetention = AudioRetention(rawValue: defaults.string(forKey: "audioRetention") ?? "") ?? .deleteAfterTranscription
         maxRecordingSeconds = defaults.integer(forKey: "maxRecordingSeconds")
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
-        triggerOnDoubleShift = defaults.bool(forKey: "triggerOnDoubleShift")
+        dictationTapModifier = Self.storedModifier(
+            defaults, key: "dictationTapModifier", legacyKey: "triggerOnDoubleShift", fallback: .shift
+        )
         shortcutKeyCode = UInt32(defaults.integer(forKey: "shortcutKeyCode"))
         shortcutModifiers = UInt32(defaults.integer(forKey: "shortcutModifiers"))
 
@@ -147,4 +157,21 @@ final class AppSettings: ObservableObject {
     var isFullyLocal: Bool {
         speechProvider.isLocal && (!improveAutomatically || textProvider.isLocal)
     }
+
+    private static func storedModifier(
+        _ defaults: UserDefaults,
+        key: String,
+        legacyKey: String,
+        fallback: TapModifier
+    ) -> TapModifier {
+        if let raw = defaults.string(forKey: key), let stored = TapModifier(rawValue: raw) {
+            return stored
+        }
+        // No new-style value: honour the old boolean if one was ever written.
+        if defaults.object(forKey: legacyKey) != nil {
+            return defaults.bool(forKey: legacyKey) ? fallback : .off
+        }
+        return fallback
+    }
+
 }

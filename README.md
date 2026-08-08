@@ -20,7 +20,7 @@ Everything is stored on your Mac. There's no account, no sign-in, and no server 
 
 `Escape` cancels and discards the recording.
 
-**The trigger is yours to change.** In **Settings › Shortcut** you can switch the double-tap off and record any key combination you like for start/stop, or keep both. Worth doing if you live in a JetBrains IDE — those use double-tap `Shift` themselves, so until you change it, both will fire.
+**The trigger is yours to change.** Setup asks which taps you want, and **Settings › Shortcut** changes them any time: `Shift`, `Control`, `Option`, `Command`, or off. There's a key combination too (`⌃⌥⌘Space` by default), which works even with both taps off. Worth changing if you live in a JetBrains IDE — those use double-tap `Shift` themselves, so until you do, both will fire.
 
 The transcript is *cleaned*, not rewritten: grammar, punctuation, filler words, and false starts are fixed, but the meaning, the facts, and your voice stay yours.
 
@@ -43,7 +43,9 @@ Nothing is invented. Most dictation isn't a to-do list, and when there's no acti
 
 Pick which list in **Settings › General**. To file to-dos from *every* dictation rather than only from double-tap `Option`, turn on **Delivery › Add to-dos to Reminders**.
 
-Option rather than Control, because macOS offers "Press Control Twice" as a Dictation shortcut and two dictation triggers on one chord collide badly. Reminders access is asked for the first time you use it.
+`Option` is the suggested tap, not a fixed one — change it in **Settings › Shortcut** like the dictation trigger. It's suggested because it's the one modifier with no established meaning when tapped alone: macOS offers "Press Control Twice" for its own Dictation, and JetBrains claims double-tap `Shift`. The two triggers can't share a modifier, so picking one for both isn't offered.
+
+Reminders access is asked for the first time you use it.
 
 ---
 

@@ -77,8 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationWillTerminate(_ notification: Notification) {
         GlobalShortcut.shared.unregister()
         GlobalShortcut.cancel.unregister()
-        DoubleTapShortcut.shift.disable()
-        DoubleTapShortcut.option.disable()
+        DoubleTapShortcut.dictation.disable()
+        DoubleTapShortcut.todo.disable()
     }
 
     // MARK: - Shortcut
@@ -111,15 +111,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Accessibility, so report when it can't be armed instead of leaving the
     /// user tapping at nothing.
     private func registerDoubleShift() {
-        guard settings.triggerOnDoubleShift else {
-            DoubleTapShortcut.shift.disable()
+        guard let modifier = settings.dictationTapModifier.flag else {
+            DoubleTapShortcut.dictation.disable()
             accessibilityRetry?.invalidate()
             accessibilityRetry = nil
             doubleShiftProblem = nil
             return
         }
 
-        let armed = DoubleTapShortcut.shift.enable { [weak self] in
+        let armed = DoubleTapShortcut.dictation.enable(modifier: modifier) { [weak self] in
             self?.controller.toggle()
         }
 
@@ -135,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             accessibilityRetry?.invalidate()
             accessibilityRetry = nil
         } else {
-            doubleShiftProblem = "Double-tap Shift needs Accessibility access."
+            doubleShiftProblem = "\(settings.dictationTapModifier.displayName) needs Accessibility access."
             startAccessibilityRetry()
 
             // Double-tap is the primary way into the app, so an un-granted
@@ -155,11 +155,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// requirement, and the same failure mode, so it reuses the retry the Shift
     /// path already runs rather than starting a second timer.
     private func registerDoubleOption() {
-        guard settings.triggerTodoOnDoubleOption else {
-            DoubleTapShortcut.option.disable()
+        guard let modifier = settings.todoTapModifier.flag else {
+            DoubleTapShortcut.todo.disable()
             return
         }
-        let armed = DoubleTapShortcut.option.enable { [weak self] in
+        let armed = DoubleTapShortcut.todo.enable(modifier: modifier) { [weak self] in
             self?.controller.toggle(intent: .todo)
         }
         UserDefaults.standard.set(armed, forKey: "diagnostic.doubleOptionArmed")
@@ -172,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         guard accessibilityRetry == nil else { return }
         accessibilityRetry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.settings.triggerOnDoubleShift else { return }
+                guard let self, self.settings.dictationTapModifier != .off else { return }
                 guard Delivery.hasAccessibilityPermission else { return }
                 self.registerDoubleShift()
                 self.registerDoubleOption()

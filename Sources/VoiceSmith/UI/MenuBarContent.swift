@@ -59,7 +59,7 @@ struct MenuBarContent: View {
         if let problem = delegate.doubleShiftProblem {
             Button("⚠︎ \(problem) Grant…") { Delivery.requestAccessibilityPermission() }
         }
-        if let problem = delegate.shortcutProblem, !settings.triggerOnDoubleShift {
+        if let problem = delegate.shortcutProblem, settings.dictationTapModifier == .off {
             Button("⚠︎ \(problem) Change…") { WindowRouter.shared.openSettings(.shortcuts) }
         }
         if settings.autoPaste && !Delivery.hasAccessibilityPermission {
@@ -223,8 +223,8 @@ struct MenuBarContent: View {
     // MARK: - Summary
 
     private var triggerDescription: String {
-        settings.triggerOnDoubleShift
-            ? "double-tap ⇧"
+        settings.dictationTapModifier != .off
+            ? settings.dictationTapModifier.shortLabel
             : GlobalShortcut.describe(
                 keyCode: settings.shortcutKeyCode,
                 modifiers: settings.shortcutModifiers

@@ -14,11 +14,12 @@ struct OnboardingView: View {
     @State private var step: Step = .welcome
 
     enum Step: Int, CaseIterable {
-        case welcome, speech, text, permissions, privacy, ready
+        case welcome, triggers, speech, text, permissions, privacy, ready
 
         var title: String {
             switch self {
             case .welcome: return "Welcome to VoiceSmith"
+            case .triggers: return "Choose your triggers"
             case .speech: return "Choose how speech is transcribed"
             case .text: return "Choose how text is improved"
             case .permissions: return "Grant permissions"
@@ -108,6 +109,7 @@ struct OnboardingView: View {
     private var content: some View {
         switch step {
         case .welcome: welcomeStep
+        case .triggers: TriggersStep(settings: settings)
         case .speech: SpeechSetupStep(settings: settings)
         case .text: TextSetupStep(settings: settings)
         case .permissions: PermissionsStep(settings: settings)
@@ -143,7 +145,13 @@ struct OnboardingView: View {
                 .font(.system(size: 13, weight: .medium))
 
             VStack(alignment: .leading, spacing: 8) {
-                SummaryRow(label: "Shortcut", value: shortcutDescription)
+                SummaryRow(label: "Dictate", value: shortcutDescription)
+                SummaryRow(
+                    label: "To-do",
+                    value: settings.todoTapModifier == .off
+                        ? "Off"
+                        : settings.todoTapModifier.shortLabel
+                )
                 SummaryRow(label: "Transcription", value: settings.speechProvider.displayName)
                 SummaryRow(
                     label: "Improvement",
@@ -172,8 +180,8 @@ struct OnboardingView: View {
     }
 
     private var shortcutDescription: String {
-        settings.triggerOnDoubleShift
-            ? "double-tap ⇧"
+        settings.dictationTapModifier != .off
+            ? settings.dictationTapModifier.shortLabel
             : GlobalShortcut.describe(
                 keyCode: settings.shortcutKeyCode,
                 modifiers: settings.shortcutModifiers
@@ -214,6 +222,47 @@ struct OnboardingView: View {
 }
 
 // MARK: - Speech step
+
+/// Offered during setup rather than left at a default, because which taps are
+/// free is entirely personal — a JetBrains user loses Shift, someone with macOS
+/// Dictation on Control loses Control. Suggesting and letting them change it
+/// beats discovering the clash on first use and having nowhere obvious to fix it.
+private struct TriggersStep: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Two taps of a modifier key start and stop VoiceSmith. These are the suggested ones — change them if another app already uses them, or turn either off.")
+                .font(.system(size: 13))
+
+            VStack(alignment: .leading, spacing: 16) {
+                TapTriggerPicker(
+                    title: "Dictate",
+                    subtitle: "Speak, and the polished text lands in the field you were typing in.",
+                    selection: $settings.dictationTapModifier,
+                    taken: settings.todoTapModifier
+                )
+
+                Divider()
+
+                TapTriggerPicker(
+                    title: "Capture a to-do",
+                    subtitle: "Say what needs doing and it goes to Apple Reminders instead.",
+                    selection: $settings.todoTapModifier,
+                    taken: settings.dictationTapModifier
+                )
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+
+            Text("There's also a key combination for dictation — \(GlobalShortcut.describe(keyCode: settings.shortcutKeyCode, modifiers: settings.shortcutModifiers)) — which works even with both taps off. All of this is in Settings › Shortcut later.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
 
 private struct SpeechSetupStep: View {
     @ObservedObject var settings: AppSettings
@@ -615,8 +664,8 @@ private struct PermissionsStep: View {
 
             PermissionRow(
                 title: "Accessibility",
-                detail: settings.triggerOnDoubleShift
-                    ? "Required for double-tap Shift, and for writing the result into the field you're in. Without it, use the key combination and paste manually."
+                detail: settings.dictationTapModifier != .off || settings.todoTapModifier != .off
+                    ? "Required for the double-tap triggers, and for writing the result into the field you're in. Without it, use the key combination and paste manually."
                     : "Optional. Lets VoiceSmith see which text field you're in and write the result into it. Without it you'll get the text on the clipboard and paste it yourself.",
                 granted: accessibility,
                 denied: false,

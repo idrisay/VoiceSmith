@@ -93,9 +93,8 @@ private struct GeneralPane: View {
                 Toggle("Insert into the focused text field", isOn: $settings.autoPaste)
                 Toggle("Show a notification", isOn: $settings.showNotification)
 
-                Toggle("Double-tap Option captures a to-do", isOn: $settings.triggerTodoOnDoubleOption)
                 Toggle("Add to-dos to Reminders from every dictation", isOn: $settings.addToTaskList)
-                if settings.addToTaskList || settings.triggerTodoOnDoubleOption {
+                if settings.addToTaskList || settings.todoTapModifier != .off {
                     RemindersSettings(settings: settings)
                 }
 
@@ -419,40 +418,51 @@ private struct ModesPane: View {
 
 // MARK: - Shortcut
 
+/// A modifier tap can't be a Carbon hot key, so it reads global events — which
+/// is nothing at all without Accessibility.
+private struct AccessibilityWarning: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Needs Accessibility access — a modifier tap can't be a system shortcut.")
+                .font(.system(size: 11))
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Grant…") { Delivery.requestAccessibilityPermission() }
+                .controlSize(.small)
+        }
+    }
+}
+
 private struct ShortcutPane: View {
     @ObservedObject var settings: AppSettings
     @State private var recording = false
 
     var body: some View {
         Form {
-            Section("Double-tap Shift") {
-                Toggle("Start and stop by tapping Shift twice", isOn: $settings.triggerOnDoubleShift)
-                    .onChange(of: settings.triggerOnDoubleShift) { _, _ in
-                        NotificationCenter.default.post(name: .shortcutChanged, object: nil)
-                    }
+            Section("Dictate") {
+                TapTriggerPicker(
+                    title: "Trigger",
+                    subtitle: "Taps must land within about a third of a second. Holding the key, or using it with another, is ignored — so typing capitals never triggers it.",
+                    selection: $settings.dictationTapModifier,
+                    taken: settings.todoTapModifier
+                )
 
-                if settings.triggerOnDoubleShift {
-                    if Delivery.hasAccessibilityPermission {
-                        Text("Taps must land within about a third of a second. Holding Shift, or using it with another key, is ignored — so typing capitals never triggers it.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text("Needs Accessibility access — a modifier tap can't be a system shortcut.")
-                                .font(.system(size: 11))
-                                .fixedSize(horizontal: false, vertical: true)
-                            Button("Grant…") { Delivery.requestAccessibilityPermission() }
-                                .controlSize(.small)
-                        }
-                    }
+                if settings.dictationTapModifier != .off, !Delivery.hasAccessibilityPermission {
+                    AccessibilityWarning()
+                }
+            }
 
-                    Text("Some editors, including the JetBrains IDEs, use double-tap Shift themselves. In those apps both will fire.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            Section("Capture a to-do") {
+                TapTriggerPicker(
+                    title: "Trigger",
+                    subtitle: "Say what needs doing and it goes to Apple Reminders, instead of being typed into whatever you're working in.",
+                    selection: $settings.todoTapModifier,
+                    taken: settings.dictationTapModifier
+                )
+
+                if settings.todoTapModifier != .off, !Delivery.hasAccessibilityPermission {
+                    AccessibilityWarning()
                 }
             }
 
