@@ -9,7 +9,7 @@ struct OpenAICompatibleProvider: TextProvider {
     let model: String
     let isLocal: Bool
 
-    func improve(_ text: String, mode: ImprovementMode, language: String) async throws -> String {
+    func complete(system: String, user: String) async throws -> String {
         var request = URLRequest(url: URL(string: "\(baseURL)/chat/completions")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -20,8 +20,8 @@ struct OpenAICompatibleProvider: TextProvider {
         let body: [String: Any] = [
             "model": model,
             "messages": [
-                ["role": "system", "content": Prompts.system(for: mode, language: language)],
-                ["role": "user", "content": text],
+                ["role": "system", "content": system],
+                ["role": "user", "content": user],
             ],
             "temperature": 0.2,
         ]
@@ -81,7 +81,7 @@ struct OllamaProvider: TextProvider {
     let baseURL: String
     let model: String
 
-    func improve(_ text: String, mode: ImprovementMode, language: String) async throws -> String {
+    func complete(system: String, user: String) async throws -> String {
         var request = URLRequest(url: URL(string: "\(baseURL)/api/chat")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -90,8 +90,8 @@ struct OllamaProvider: TextProvider {
             "model": model,
             "stream": false,
             "messages": [
-                ["role": "system", "content": Prompts.system(for: mode, language: language)],
-                ["role": "user", "content": text],
+                ["role": "system", "content": system],
+                ["role": "user", "content": user],
             ],
             "options": ["temperature": 0.2],
         ]

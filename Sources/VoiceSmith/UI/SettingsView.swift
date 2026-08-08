@@ -2,6 +2,56 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
+/// Permission state and destination list for to-do filing.
+///
+/// The list is read from EventKit on appear rather than held in the settings
+/// object, because it changes in another app: lists get renamed and deleted in
+/// Reminders, and a stale copy here would offer somewhere that no longer exists.
+private struct RemindersSettings: View {
+    @ObservedObject var settings: AppSettings
+
+    @State private var lists: [(id: String, title: String)] = []
+    @State private var isAuthorized = RemindersService.shared.isAuthorized
+
+    var body: some View {
+        Group {
+            if isAuthorized {
+                Picker("To-do list", selection: $settings.reminderListID) {
+                    Text("Default list").tag("")
+                    if !lists.isEmpty { Divider() }
+                    ForEach(lists, id: \.id) { list in
+                        Text(list.title).tag(list.id)
+                    }
+                }
+                Text("After each dictation, VoiceSmith asks the text model for any action items you mentioned and adds them here. Nothing is added when you weren't describing something to do. You can undo straight from the popup.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Adding to-dos needs access to Reminders.")
+                        .font(.system(size: 11))
+                    Button("Grant…") {
+                        Task { @MainActor in
+                            await RemindersService.shared.requestAccess()
+                            refresh()
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        isAuthorized = RemindersService.shared.isAuthorized
+        lists = isAuthorized ? RemindersService.shared.availableLists() : []
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var router: WindowRouter
@@ -42,6 +92,12 @@ private struct GeneralPane: View {
                 Toggle("Copy to clipboard", isOn: $settings.copyToClipboard)
                 Toggle("Insert into the focused text field", isOn: $settings.autoPaste)
                 Toggle("Show a notification", isOn: $settings.showNotification)
+
+                Toggle("Double-tap Option captures a to-do", isOn: $settings.triggerTodoOnDoubleOption)
+                Toggle("Add to-dos to Reminders from every dictation", isOn: $settings.addToTaskList)
+                if settings.addToTaskList || settings.triggerTodoOnDoubleOption {
+                    RemindersSettings(settings: settings)
+                }
 
                 if settings.autoPaste {
                     if Delivery.hasAccessibilityPermission {

@@ -12,9 +12,32 @@ protocol SpeechProvider {
 }
 
 /// Adding a text backend means conforming to this. Nothing else changes.
+///
+/// Backends are transports and nothing more: hand them a system prompt and a
+/// user message, get back what the model said. Every prompt the app sends is
+/// built in `Prompts`, so a new capability — cleanup, task extraction, whatever
+/// comes next — reaches all eleven backends at once, and a new backend arrives
+/// supporting all of them without knowing they exist.
 protocol TextProvider {
     var displayName: String { get }
-    func improve(_ text: String, mode: ImprovementMode, language: String) async throws -> String
+    func complete(system: String, user: String) async throws -> String
+}
+
+extension TextProvider {
+    func improve(_ text: String, mode: ImprovementMode, language: String) async throws -> String {
+        try await complete(system: Prompts.improvement(for: mode, language: language), user: text)
+    }
+
+    /// Pulls action items out of a dictation.
+    ///
+    /// An empty result is a normal, common outcome — most dictation isn't a list
+    /// of things to do — and is much better than inventing a task in order to
+    /// have found one. These go into the user's real reminders list, so a false
+    /// positive costs them more than a miss.
+    func extractTasks(from text: String, now: Date) async throws -> [ExtractedTask] {
+        let raw = try await complete(system: Prompts.taskExtraction(now: now), user: text)
+        return TaskExtraction.parse(raw, now: now)
+    }
 }
 
 // MARK: - Shared prompt construction
@@ -22,7 +45,7 @@ protocol TextProvider {
 enum Prompts {
     /// The AI rules from the spec, applied to every provider identically so that
     /// switching models changes quality, not behaviour.
-    static func system(for mode: ImprovementMode, language: String) -> String {
+    static func improvement(for mode: ImprovementMode, language: String) -> String {
         """
         You clean up dictated speech into written text.
 
@@ -48,6 +71,53 @@ enum Prompts {
 
     private static func languageInstruction(_ language: String) -> String {
         language == "auto" ? "the same language the transcript is in" : Locale.current.localizedString(forIdentifier: language) ?? language
+    }
+
+    /// Task extraction asks for JSON rather than prose, so it deliberately does
+    /// not reuse the cleanup scaffold above — those rules ("return only the
+    /// improved text", "write in <language>") would fight the format.
+    ///
+    /// `now` is passed in rather than read here so that "tomorrow" resolves
+    /// against the moment the user spoke, and so the parser and the prompt agree
+    /// on what today means even if the call is slow or retried.
+    static func taskExtraction(now: Date) -> String {
+        let calendar = Calendar.current
+        let iso = DateFormatter()
+        iso.calendar = calendar
+        iso.locale = Locale(identifier: "en_US_POSIX")
+        iso.dateFormat = "yyyy-MM-dd"
+        let weekday = DateFormatter()
+        weekday.locale = Locale(identifier: "en_US_POSIX")
+        weekday.dateFormat = "EEEE"
+
+        return """
+        You extract action items from dictated speech.
+
+        Return a JSON array. Every element is an object with exactly these keys:
+          "title": string — a short imperative, e.g. "Call the dentist"
+          "notes": string or null — genuinely useful extra detail, otherwise null
+          "due":   string or null — "YYYY-MM-DD", or "YYYY-MM-DDTHH:MM" if a time \
+        of day was given
+
+        Rules:
+        - Extract only things somebody needs to DO. Observations, opinions, \
+        decisions already taken, and statements of fact are not tasks.
+        - One element per distinct action. "Call the dentist and email Sarah the \
+        deck" is two elements, not one.
+        - Strip the framing from titles: "I need to", "remind me to", "don't \
+        forget to", "we should". Keep the action itself.
+        - Never invent a task, a detail, or a deadline. If the speaker gave no \
+        deadline, "due" is null. A task the speaker did not describe is worse \
+        than a task you missed — these go straight into the user's own list.
+        - Do not pad "notes" to have something there. Null is the normal value.
+        - Today is \(iso.string(from: now)), a \(weekday.string(from: now)). \
+        Resolve relative dates against it: "tomorrow", "next Friday", "end of the \
+        month" all become concrete dates.
+        - Write each title in the language the speaker used. Never translate.
+        - If the speaker described no action items at all, return [].
+
+        Return only the JSON array. No prose, no commentary, no code fences.
+        """
     }
 }
 

@@ -19,6 +19,8 @@ enum VoiceSmithError: LocalizedError, Equatable {
     case localModelUnavailable(provider: String, detail: String)
     case refused(provider: String)
     case accessibilityPermissionDenied
+    case remindersPermissionDenied
+    case remindersUnavailable(detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -52,6 +54,10 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return "\(provider) declined to process this text."
         case .accessibilityPermissionDenied:
             return "VoiceSmith can't paste into other apps."
+        case .remindersPermissionDenied:
+            return "VoiceSmith can't add to your reminders."
+        case .remindersUnavailable(let detail):
+            return "Reminders didn't accept the tasks: \(detail)"
         }
     }
 
@@ -85,6 +91,10 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return "Make sure the local server is running and the model is installed, or switch to a cloud provider."
         case .refused:
             return "Edit the transcript, or switch to a different text provider."
+        case .remindersPermissionDenied:
+            return "Adding to-dos needs access to Reminders. Open System Settings › Privacy & Security › Reminders and enable VoiceSmith. Your dictation was delivered as usual."
+        case .remindersUnavailable:
+            return "The text was delivered as usual — only the to-dos didn't file. Check that Reminders has at least one editable list."
         case .accessibilityPermissionDenied:
             return "Automatic pasting needs Accessibility access. Open System Settings › Privacy & Security › Accessibility and enable VoiceSmith. The text is still on your clipboard — press ⌘V to paste it yourself."
         }
@@ -111,6 +121,8 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
         case .accessibilityPermissionDenied:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        case .remindersPermissionDenied:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
         case .noInputDevice, .inputDeviceDisconnected:
             return URL(string: "x-apple.systempreferences:com.apple.preference.sound")
         default:

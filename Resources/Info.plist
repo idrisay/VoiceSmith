@@ -13,9 +13,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1</string>
+	<string>1.2</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VoiceSmith records your voice so it can turn what you say into text.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>VoiceSmith adds the to-dos you dictate to your Reminders lists.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>VoiceSmith transcribes your recordings on this Mac using Apple's speech recogniser.</string>
 </dict>

@@ -1,14 +1,29 @@
 import AppKit
 import Foundation
 
-/// Detects a double-tap of Shift anywhere in the system.
+/// Detects a double-tap of one modifier key anywhere in the system.
 ///
 /// This can't be a Carbon hot key: `RegisterEventHotKey` needs a real key plus
 /// modifiers, and has no concept of tapping a modifier twice. So it watches
 /// `flagsChanged` instead — which means it needs Accessibility permission, and
 /// degrades to "off" without it rather than failing silently.
+///
+/// One instance per modifier, each watching independently. They can't be folded
+/// into a single monitor: a tap of one modifier has to *reset* the other's
+/// pending state, or alternating Shift and Option quickly would fire both.
 final class DoubleTapShortcut {
-    static let shared = DoubleTapShortcut()
+    /// Double-tap Shift: start or stop dictating.
+    static let shift = DoubleTapShortcut(modifier: .shift)
+    /// Double-tap Option: capture straight to the to-do list.
+    ///
+    /// Option rather than Control: macOS offers "Press Control Twice" as a
+    /// Dictation shortcut, and two dictation triggers on one chord would be a
+    /// uniquely bad collision. Option has no system meaning when tapped alone.
+    static let option = DoubleTapShortcut(modifier: .option)
+
+    static var all: [DoubleTapShortcut] { [.shift, .option] }
+
+    let modifier: NSEvent.ModifierFlags
 
     /// Two taps must land within this window. Matches the feel of other
     /// double-tap-Shift affordances; long enough to be comfortable, short enough
@@ -18,10 +33,12 @@ final class DoubleTapShortcut {
     private var monitors: [Any] = []
     private var onFire: (() -> Void)?
 
-    private var shiftIsDown = false
+    private var modifierIsDown = false
     private var lastTapAt: Date?
 
-    private init() {}
+    private init(modifier: NSEvent.ModifierFlags) {
+        self.modifier = modifier
+    }
 
     var isEnabled: Bool { !monitors.isEmpty }
 
@@ -68,23 +85,33 @@ final class DoubleTapShortcut {
         }
         monitors.removeAll()
         onFire = nil
-        shiftIsDown = false
+        modifierIsDown = false
+        lastTapAt = nil
+    }
+
+    /// Forget a pending first tap. Called when another modifier fires so that
+    /// Shift-then-Option doesn't read as a double-tap of either.
+    func resetPendingTap() {
         lastTapAt = nil
     }
 
     private func handleFlags(_ event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let shiftAlone = flags == .shift
+        let aloneNow = flags == modifier
 
-        if shiftAlone {
-            // Rising edge only — holding Shift down must not repeat.
-            guard !shiftIsDown else { return }
-            shiftIsDown = true
+        if aloneNow {
+            // Rising edge only — holding the key down must not repeat.
+            guard !modifierIsDown else { return }
+            modifierIsDown = true
+
+            // A tap of this modifier invalidates any half-finished tap of the
+            // other one, so alternating them can never complete a pair.
+            for other in Self.all where other !== self { other.resetPendingTap() }
 
             let now = Date()
             if let last = lastTapAt, now.timeIntervalSince(last) <= threshold {
                 lastTapAt = nil
-                shiftIsDown = true
+                modifierIsDown = true
                 onFire?()
             } else {
                 lastTapAt = now
@@ -93,12 +120,12 @@ final class DoubleTapShortcut {
         }
 
         if flags.isEmpty {
-            shiftIsDown = false
+            modifierIsDown = false
             return
         }
 
-        // Shift combined with anything else is a normal chord, not our trigger.
-        shiftIsDown = flags.contains(.shift)
+        // Combined with anything else it's a normal chord, not our trigger.
+        modifierIsDown = flags.contains(modifier)
         lastTapAt = nil
     }
 }

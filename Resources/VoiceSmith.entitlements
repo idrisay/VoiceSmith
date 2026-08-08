@@ -9,6 +9,11 @@
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 
+	<!-- Writing dictated to-dos into Reminders. Same story as the microphone:
+	     the hardened runtime blocks EventKit without it. -->
+	<key>com.apple.security.personal-information.reminders</key>
+	<true/>
+
 	<!-- Accessibility deliberately has no entitlement. It is a TCC grant the
 	     user makes in System Settings, and posting CGEvents (Delivery.swift)
 	     needs nothing beyond that. -->

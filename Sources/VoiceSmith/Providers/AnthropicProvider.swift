@@ -9,7 +9,7 @@ struct AnthropicProvider: TextProvider {
 
     private static let apiVersion = "2023-06-01"
 
-    func improve(_ text: String, mode: ImprovementMode, language: String) async throws -> String {
+    func complete(system: String, user: String) async throws -> String {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -23,8 +23,8 @@ struct AnthropicProvider: TextProvider {
         var body: [String: Any] = [
             "model": model,
             "max_tokens": 8192,
-            "system": Prompts.system(for: mode, language: language),
-            "messages": [["role": "user", "content": text]],
+            "system": system,
+            "messages": [["role": "user", "content": user]],
             "fallbacks": "default",
         ]
 

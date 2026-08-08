@@ -68,7 +68,28 @@ jobs:
       - name: Write the release notes
         if: github.ref_type == 'tag'
         run: |
-          cat > notes.md <<'NOTES'
+          # What's new comes from CHANGELOG.md, so the notes describe the
+          # release rather than repeating install instructions at someone who
+          # has already installed it. A missing section is not fatal — the
+          # install half below still stands on its own.
+          python3 - <<'EOF' > notes.md
+          import os, re
+          version = os.environ["VERSION"]
+          try:
+              text = open("CHANGELOG.md").read()
+          except FileNotFoundError:
+              text = ""
+          match = re.search(
+              rf"^## {re.escape(version)}\s*$(.*?)(?=^## |\Z)", text, re.M | re.S
+          )
+          if match and match.group(1).strip():
+              print(match.group(1).strip())
+              print()
+              print("---")
+              print()
+          EOF
+
+          cat >> notes.md <<'NOTES'
           ## Install
 
           **One line, nothing to click:**

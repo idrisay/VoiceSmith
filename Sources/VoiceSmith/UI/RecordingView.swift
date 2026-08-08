@@ -25,6 +25,8 @@ struct RecordingView: View {
                 ErrorPill(controller: controller, error: error)
             case .recording:
                 recordingPill
+            case .done where controller.todoOutcome != nil:
+                TodoOutcomePill(controller: controller)
             default:
                 workingPill
             }
@@ -37,6 +39,23 @@ struct RecordingView: View {
     private var recordingPill: some View {
         HStack(spacing: 11) {
             MicIndicator(level: recorder.levels.last ?? 0, isPaused: recorder.isPaused)
+
+            // Double-tap Option and double-tap Shift produce identical-looking
+            // popups otherwise, and they do very different things with what you
+            // say. Whichever one you reached for, you find out here — while
+            // there's still time to hit Escape — rather than afterwards.
+            if controller.intent == .todo {
+                HStack(spacing: 4) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("To-do")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(.tint)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+            }
 
             SoundBars(levels: recorder.levels, isPaused: recorder.isPaused)
                 .frame(width: 96, height: 26)
@@ -100,6 +119,7 @@ struct RecordingView: View {
         switch controller.phase {
         case .transcribing: return "Transcribing…"
         case .improving: return "Improving…"
+        case .filingTasks: return "Finding to-dos…"
         case .done: return "Inserted"
         default: return "Working…"
         }
@@ -108,6 +128,127 @@ struct RecordingView: View {
     private func timeString(_ interval: TimeInterval) -> String {
         let total = Int(interval)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+// MARK: - To-do outcome
+
+/// The one place the app shows its work before getting out of the way.
+///
+/// Everything else in this pipeline is reversible by ignoring it — text you
+/// don't want, you delete. Reminders are different: they land in a list the user
+/// keeps, and a wrong one has to be hunted down later in another app. So the
+/// titles are shown and undo is right there.
+///
+/// It dismisses itself after a few seconds, because a confirmation you have to
+/// dismiss by hand is a chore attached to every single capture. Hovering pauses
+/// the countdown: reaching for Undo must never be a race against it.
+private struct TodoOutcomePill: View {
+    @ObservedObject var controller: AppController
+
+    /// Long enough to read four task titles, short enough not to sit in the way.
+    private static let secondsOnScreen = 4
+
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            switch controller.todoOutcome {
+            case .filed(let tasks):
+                filed(tasks)
+            case .nothingFound(let heard):
+                nothingFound(heard)
+            case nil:
+                EmptyView()
+            }
+        }
+        .padding(14)
+        .frame(width: 330, alignment: .leading)
+        .background(PillBackground())
+        .onHover { hovering = $0 }
+        .task(id: controller.todoOutcome) {
+            var remaining = Self.secondsOnScreen
+            while remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                // Paused, not cancelled — the countdown resumes on leaving.
+                if hovering { continue }
+                remaining -= 1
+            }
+            controller.acknowledgeTodoOutcome()
+        }
+    }
+
+    @ViewBuilder
+    private func filed(_ tasks: [ExtractedTask]) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "checklist")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tint)
+            Text(tasks.count == 1 ? "1 to-do added" : "\(tasks.count) to-dos added")
+                .font(.system(size: 12, weight: .semibold))
+        }
+
+        VStack(alignment: .leading, spacing: 3) {
+            // Enough to recognise a mistake, not so many that the panel becomes
+            // a list view. The rest are in Reminders.
+            ForEach(tasks.prefix(4)) { task in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "circle")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.secondary)
+                    Text(task.title)
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                    if let due = task.dueDate {
+                        Text(due, format: .dateTime.day().month(.abbreviated))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if tasks.count > 4 {
+                Text("and \(tasks.count - 4) more")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 13)
+            }
+        }
+
+        HStack(spacing: 8) {
+            Button("Undo") { controller.undoFiledTasks() }
+                .controlSize(.small)
+            Spacer()
+            Button("Open Reminders") {
+                NSWorkspace.shared.open(URL(string: "x-apple-reminderkit://")!)
+            }
+            .controlSize(.small)
+        }
+    }
+
+    /// Says what was heard, because that is nearly always the explanation —
+    /// a hallucinated "Thank you." off a silent recording, or a sentence that
+    /// asked the app to do something instead of naming a task.
+    @ViewBuilder
+    private func nothingFound(_ heard: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text("No to-do in that")
+                .font(.system(size: 12, weight: .semibold))
+        }
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Heard: \u{201C}\(heard)\u{201D}")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Say the task itself — \u{201C}call the dentist tomorrow\u{201D}.")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

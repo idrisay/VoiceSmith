@@ -39,6 +39,21 @@ final class AppSettings: ObservableObject {
     @Published var improveAutomatically: Bool {
         didSet { defaults.set(improveAutomatically, forKey: "improveAutomatically") }
     }
+    /// Off by default. It costs a second model call and writes to a list the
+    /// user owns, so it is opted into rather than out of.
+    /// Double-tap Option captures straight to the to-do list. On by default:
+    /// it costs nothing until used, and it is the only route to the feature
+    /// that needs no menu bar icon to find.
+    @Published var triggerTodoOnDoubleOption: Bool {
+        didSet { defaults.set(triggerTodoOnDoubleOption, forKey: "triggerTodoOnDoubleOption") }
+    }
+    @Published var addToTaskList: Bool {
+        didSet { defaults.set(addToTaskList, forKey: "addToTaskList") }
+    }
+    /// Empty means whichever list Reminders itself treats as the default.
+    @Published var reminderListID: String {
+        didSet { defaults.set(reminderListID, forKey: "reminderListID") }
+    }
 
     @Published var audioRetention: AudioRetention {
         didSet { defaults.set(audioRetention.rawValue, forKey: "audioRetention") }
@@ -76,6 +91,9 @@ final class AppSettings: ObservableObject {
             "textModel": TextProviderKind.anthropic.defaultModel,
             "modeID": "professional",
             "language": "auto",
+            "addToTaskList": false,
+            "triggerTodoOnDoubleOption": true,
+            "reminderListID": "",
             "copyToClipboard": true,
             "autoPaste": true,
             "showNotification": true,
@@ -97,6 +115,9 @@ final class AppSettings: ObservableObject {
         textModel = defaults.string(forKey: "textModel") ?? TextProviderKind.anthropic.defaultModel
         modeID = defaults.string(forKey: "modeID") ?? "professional"
         language = defaults.string(forKey: "language") ?? "auto"
+        addToTaskList = defaults.bool(forKey: "addToTaskList")
+        triggerTodoOnDoubleOption = defaults.bool(forKey: "triggerTodoOnDoubleOption")
+        reminderListID = defaults.string(forKey: "reminderListID") ?? ""
         copyToClipboard = defaults.bool(forKey: "copyToClipboard")
         autoPaste = defaults.bool(forKey: "autoPaste")
         showNotification = defaults.bool(forKey: "showNotification")

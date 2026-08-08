@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         registerShortcut()
         registerDoubleShift()
+        registerDoubleOption()
         NotificationCenter.default.addObserver(
             forName: .shortcutChanged,
             object: nil,
@@ -58,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             MainActor.assumeIsolated {
                 self?.registerShortcut()
                 self?.registerDoubleShift()
+                self?.registerDoubleOption()
             }
         }
 
@@ -75,7 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationWillTerminate(_ notification: Notification) {
         GlobalShortcut.shared.unregister()
         GlobalShortcut.cancel.unregister()
-        DoubleTapShortcut.shared.disable()
+        DoubleTapShortcut.shift.disable()
+        DoubleTapShortcut.option.disable()
     }
 
     // MARK: - Shortcut
@@ -109,14 +112,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// user tapping at nothing.
     private func registerDoubleShift() {
         guard settings.triggerOnDoubleShift else {
-            DoubleTapShortcut.shared.disable()
+            DoubleTapShortcut.shift.disable()
             accessibilityRetry?.invalidate()
             accessibilityRetry = nil
             doubleShiftProblem = nil
             return
         }
 
-        let armed = DoubleTapShortcut.shared.enable { [weak self] in
+        let armed = DoubleTapShortcut.shift.enable { [weak self] in
             self?.controller.toggle()
         }
 
@@ -145,6 +148,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    /// Double-tap Option: record straight into the to-do list.
+    ///
+    /// Independent of the Shift trigger — someone who has rebound dictation to a
+    /// key chord should still get this. It shares the same Accessibility
+    /// requirement, and the same failure mode, so it reuses the retry the Shift
+    /// path already runs rather than starting a second timer.
+    private func registerDoubleOption() {
+        guard settings.triggerTodoOnDoubleOption else {
+            DoubleTapShortcut.option.disable()
+            return
+        }
+        let armed = DoubleTapShortcut.option.enable { [weak self] in
+            self?.controller.toggle(intent: .todo)
+        }
+        UserDefaults.standard.set(armed, forKey: "diagnostic.doubleOptionArmed")
+    }
+
     /// Granting Accessibility sends no notification, and the grant can't be
     /// picked up retroactively — so keep trying to arm until it takes. Without
     /// this, granting permission appears to do nothing until the app restarts.
@@ -155,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 guard let self, self.settings.triggerOnDoubleShift else { return }
                 guard Delivery.hasAccessibilityPermission else { return }
                 self.registerDoubleShift()
+                self.registerDoubleOption()
             }
         }
     }
@@ -182,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             guard let self else { return }
             switch phase {
             case .recording: self.menuBarIcon = MenuBarIcon.image(for: .recording)
-            case .transcribing, .improving: self.menuBarIcon = MenuBarIcon.image(for: .working)
+            case .transcribing, .improving, .filingTasks: self.menuBarIcon = MenuBarIcon.image(for: .working)
             case .failed: self.menuBarIcon = MenuBarIcon.image(for: .problem)
             default: self.menuBarIcon = MenuBarIcon.image(for: .idle)
             }

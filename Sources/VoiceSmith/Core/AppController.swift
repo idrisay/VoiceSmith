@@ -12,16 +12,23 @@ final class AppController: ObservableObject {
         case recording
         case transcribing
         case improving
+        case filingTasks
         case done(noteID: UUID)
         case failed(VoiceSmithError)
 
         var isBusy: Bool {
             switch self {
-            case .recording, .transcribing, .improving: return true
+            case .recording, .transcribing, .improving, .filingTasks: return true
             default: return false
             }
         }
     }
+
+    /// What the current recording is for. Set at invoke, because it's the
+    /// trigger the user reached for that says what they meant — double-tap
+    /// Option means "this is a to-do" before a word has been spoken.
+    enum CaptureIntent { case text, todo }
+    @Published private(set) var intent: CaptureIntent = .text
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var statusDetail: String = ""
@@ -29,6 +36,22 @@ final class AppController: ObservableObject {
     @Published private(set) var pendingAudio: URL?
     /// The text field captured at invoke. Drives both panel placement and delivery.
     @Published private(set) var target: FocusedInput = .none
+    /// How the last to-do capture ended.
+    ///
+    /// Both outcomes get shown. Filing nothing is the correct response to
+    /// "thank you" or a stray silence, but it looks identical to a broken
+    /// feature unless the app says so — and the user pressed a key on purpose,
+    /// so they are owed an answer either way.
+    enum TodoOutcome: Equatable, Hashable {
+        case filed([ExtractedTask])
+        /// Nothing in what was said described something to do. Carries the
+        /// transcript, because seeing what was heard is usually the explanation.
+        case nothingFound(heard: String)
+    }
+    /// Non-nil only while the confirmation is on screen. Undo lives exactly as
+    /// long as this does; past that, Reminders owns what was filed.
+    @Published private(set) var todoOutcome: TodoOutcome?
+    private var filedReminderIDs: [String] = []
 
     let recorder = AudioRecorder()
     let settings: AppSettings
@@ -56,18 +79,25 @@ final class AppController: ObservableObject {
 
     /// The global shortcut and the menu bar item both land here. Pressing again
     /// while recording stops — that's the one-key round trip the product is built on.
-    func toggle() {
+    func toggle(intent: CaptureIntent = .text) {
         switch phase {
         case .recording:
             stopAndProcess()
         case .idle, .done, .failed:
-            beginRecording()
-        case .transcribing, .improving:
+            beginRecording(intent: intent)
+        case .transcribing, .improving, .filingTasks:
             break // Already working; ignore.
         }
     }
 
-    func beginRecording() {
+    func beginRecording(intent: CaptureIntent = .text) {
+        self.intent = intent
+
+        // The previous dictation's to-dos are no longer undoable once a new one
+        // starts — the panel that offered it is about to show something else.
+        todoOutcome = nil
+        filedReminderIDs = []
+
         // Capture the focused field *first*: showing the panel or requesting
         // permission can move focus, and by then the caret is gone.
         target = FocusedInput.capture()
@@ -107,6 +137,8 @@ final class AppController: ObservableObject {
         phase = .idle
         statusDetail = ""
         pendingAudio = nil
+        todoOutcome = nil
+        filedReminderIDs = []
         windowDismisser?()
     }
 
@@ -152,7 +184,19 @@ final class AppController: ObservableObject {
                 )
                 try Task.checkCancellation()
 
-                // 2. Improve. A failure here is non-fatal: the raw transcript is
+                // 2. Double-tap Option said this is a to-do before a word was
+                // spoken, so the whole transcript is the task: no improvement,
+                // no insertion, straight to Reminders.
+                if intent == .todo {
+                    try await runTodoCapture(
+                        transcript: transcript,
+                        audio: audio,
+                        duration: duration
+                    )
+                    return
+                }
+
+                // 3. Improve. A failure here is non-fatal: the raw transcript is
                 // still worth delivering, so we report and continue.
                 var improved: String?
                 var textProviderName: String?
@@ -196,20 +240,37 @@ final class AppController: ObservableObject {
                     try? FileManager.default.removeItem(at: audio)
                 }
 
-                // 4. Deliver.
+                // 4. Deliver. This happens before any task filing, so the text
+                // reaches the user whatever the to-do step goes on to do.
                 deliver(note.displayText)
-
                 pendingAudio = nil
+
+                // 5. File to-dos, when asked. Deliberately last and deliberately
+                // non-fatal: the dictation is already delivered by this point, so
+                // a failure here costs the user their tasks, never their words.
+                var taskError: VoiceSmithError?
+                if settings.addToTaskList {
+                    do {
+                        try await fileTasks(from: note.displayText)
+                    } catch let error as VoiceSmithError {
+                        taskError = error
+                    }
+                }
+                try Task.checkCancellation()
+
                 phase = .done(noteID: note.id)
 
-                if let improvementError {
-                    // Delivered the raw transcript — say so rather than pretending
-                    // the improvement step succeeded.
-                    statusDetail = improvementError.errorDescription ?? "Improvement failed"
-                    present(improvementError, keepingAudio: nil)
+                // Improvement failing is the more serious of the two — it means
+                // the text delivered was the raw transcript — so it wins the
+                // one slot the panel has for saying what went wrong.
+                if let problem = improvementError ?? taskError {
+                    statusDetail = problem.errorDescription ?? "Something didn't finish"
+                    present(problem, keepingAudio: nil)
                 } else {
                     statusDetail = ""
-                    windowDismisser?()
+                    // Hold the panel open while there's an undo to offer; the
+                    // tasks are in the user's own list from here on.
+                    if todoOutcome == nil { windowDismisser?() }
                 }
             } catch is CancellationError {
                 phase = .idle
@@ -227,6 +288,136 @@ final class AppController: ObservableObject {
                 )
             }
         }
+    }
+
+    // MARK: - To-dos
+
+    /// Runs a dictation captured with double-tap Option.
+    ///
+    /// Every failure path here ends by delivering the words the normal way. The
+    /// user asked for a reminder, and not getting one is a disappointment — but
+    /// silently swallowing a sentence they spoke, because a permission or an API
+    /// key was missing, would be a bug. Text they didn't want is easy to delete;
+    /// text that vanished is gone.
+    private func runTodoCapture(
+        transcript: Transcript,
+        audio: URL,
+        duration: TimeInterval
+    ) async throws {
+        let spoken = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keepAudio = settings.audioRetention != .deleteAfterTranscription
+        let note = VoiceNote(
+            duration: duration,
+            audioPath: keepAudio ? audio.path : nil,
+            rawTranscript: transcript.text,
+            improvedText: nil,
+            language: transcript.language,
+            mode: "To-do",
+            speechProvider: settings.speechProvider.displayName,
+            speechModel: settings.speechModel,
+            textProvider: nil,
+            textModel: nil
+        )
+        store.insert(note)
+        if !keepAudio { try? FileManager.default.removeItem(at: audio) }
+        pendingAudio = nil
+
+        // Nothing but silence or punctuation came back. No reason to spend a
+        // model call finding out there is no task in it.
+        guard !spoken.isEmpty else {
+            phase = .done(noteID: note.id)
+            windowDismisser?()
+            return
+        }
+
+        // Ask for Reminders here if it has never been asked. macOS only lists an
+        // app under Privacy & Security once it has requested, so telling a user
+        // who has never been prompted to "enable VoiceSmith in System Settings"
+        // would send them to look for a row that isn't there. This is also the
+        // one moment the request explains itself: they just asked for a to-do.
+        if !RemindersService.shared.isAuthorized, !RemindersService.shared.hasBeenAsked {
+            await RemindersService.shared.requestAccess()
+        }
+
+        guard RemindersService.shared.isAuthorized else {
+            deliver(spoken)
+            phase = .done(noteID: note.id)
+            present(.remindersPermissionDenied, keepingAudio: nil)
+            return
+        }
+
+        do {
+            try await fileTasks(from: spoken)
+        } catch let error as VoiceSmithError {
+            deliver(spoken)
+            phase = .done(noteID: note.id)
+            present(error, keepingAudio: nil)
+            return
+        }
+
+        phase = .done(noteID: note.id)
+
+        // An explicit command that produced nothing needs saying out loud. When
+        // filing runs off the toggle, silence is the right answer — the user
+        // wasn't asking. Here they were.
+        statusDetail = ""
+        if todoOutcome == nil {
+            todoOutcome = .nothingFound(heard: spoken)
+        }
+    }
+
+    /// Extracts action items and writes them to Reminders.
+    ///
+    /// Two things are worth noticing about the order here. Permission is checked
+    /// before the model call, so a user who never granted it isn't billed for
+    /// extraction that can't be used. And nothing is written when the model finds
+    /// no tasks — most dictation isn't a to-do list, and silence is the correct
+    /// response to that, not an empty reminder.
+    private func fileTasks(from text: String) async throws {
+        guard RemindersService.shared.isAuthorized else {
+            throw VoiceSmithError.remindersPermissionDenied
+        }
+
+        phase = .filingTasks
+        statusDetail = settings.textProvider.displayName
+
+        let provider = try ProviderFactory.text(settings)
+        let tasks = try await provider.extractTasks(from: text, now: Date())
+        guard !tasks.isEmpty else { return }
+
+        try Task.checkCancellation()
+        filedReminderIDs = try RemindersService.shared.save(
+            tasks,
+            toListWithID: settings.reminderListID
+        )
+        todoOutcome = .filed(tasks)
+
+        if settings.showNotification {
+            Delivery.notify(
+                title: tasks.count == 1 ? "1 to-do added" : "\(tasks.count) to-dos added",
+                body: tasks.map(\.title).joined(separator: "\n")
+            )
+        }
+    }
+
+    /// Takes back what the last dictation filed. The panel offers this only while
+    /// it's on screen — past that the reminders belong to Reminders.
+    func undoFiledTasks() {
+        RemindersService.shared.remove(identifiers: filedReminderIDs)
+        filedReminderIDs = []
+        todoOutcome = nil
+        statusDetail = ""
+        windowDismisser?()
+    }
+
+    /// Dismisses the confirmation without touching what was filed. Called by the
+    /// buttons and by the countdown alike — doing nothing is a valid answer, and
+    /// the common one.
+    func acknowledgeTodoOutcome() {
+        filedReminderIDs = []
+        todoOutcome = nil
+        statusDetail = ""
+        windowDismisser?()
     }
 
     private func deliver(_ text: String) {

@@ -26,6 +26,27 @@ The transcript is *cleaned*, not rewritten: grammar, punctuation, filler words, 
 
 ---
 
+## To-dos
+
+**Double-tap `Option`** instead, say what needs doing, and double-tap again. It goes to **Apple Reminders** — nothing is typed into whatever you were working in.
+
+```
+"Call the dentist and email Sarah the deck by Friday"
+
+  ☐ Call the dentist
+  ☐ Email Sarah the deck      Fri 14 Aug
+```
+
+One sentence can hold several tasks, and relative dates — tomorrow, next Friday, end of the month — are resolved against the day you spoke. Say the task itself: *"call the dentist tomorrow"*, not *"add a reminder to call the dentist"*.
+
+Nothing is invented. Most dictation isn't a to-do list, and when there's no action item in what you said, nothing is filed — the popup tells you what it heard instead. What *is* filed appears in a confirmation with **Undo**, which clears itself after a few seconds unless you hover it.
+
+Pick which list in **Settings › General**. To file to-dos from *every* dictation rather than only from double-tap `Option`, turn on **Delivery › Add to-dos to Reminders**.
+
+Option rather than Control, because macOS offers "Press Control Twice" as a Dictation shortcut and two dictation triggers on one chord collide badly. Reminders access is asked for the first time you use it.
+
+---
+
 ## Requirements
 
 - macOS 14 or later, Intel or Apple Silicon
@@ -108,13 +129,13 @@ Skip it if you like — the build falls back to ad-hoc signing and warns you.
 
 #### Publishing a release
 
-Bump `CFBundleShortVersionString` in `Resources/Info.plist`, commit, then push a matching tag:
+Add a section to `CHANGELOG.md`, bump `CFBundleShortVersionString` in `Resources/Info.plist` to match, commit, then push a matching tag:
 
 ```bash
-git tag v1.1 && git push origin v1.1
+git tag v1.2 && git push origin v1.2
 ```
 
-The workflow builds a universal binary, packages the `.dmg` and `.zip`, and publishes them. It refuses to run if the tag and the plist disagree. `./Scripts/release.sh` does the same thing locally, and takes `DEVELOPER_ID` and `NOTARY_PROFILE` if a paid membership ever makes notarisation possible — at which point every warning on this page goes away.
+The workflow puts the matching changelog section at the top of the release notes, builds a universal binary, packages the `.dmg` and `.zip`, and publishes them. It refuses to run if the tag and the plist disagree. `./Scripts/release.sh` does the same thing locally, and takes `DEVELOPER_ID` and `NOTARY_PROFILE` if a paid membership ever makes notarisation possible — at which point every warning on this page goes away.
 
 ### Permissions
 
@@ -124,7 +145,8 @@ On first launch VoiceSmith asks for what it needs:
 |---|---|---|
 | **Microphone** | Recording | Yes |
 | **Speech Recognition** | On-device transcription with Apple Speech | Only for Apple Speech |
-| **Accessibility** | Detecting the focused text field, writing into it, and double-tap `Shift` | Yes for the default setup |
+| **Accessibility** | Detecting the focused text field, writing into it, and the double-tap triggers | Yes for the default setup |
+| **Reminders** | Filing dictated to-dos | Only for to-dos |
 
 Without Accessibility, VoiceSmith still works — use the key combination (`⌃⌥⌘Space`) and paste with `⌘V` yourself.
 

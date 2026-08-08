@@ -67,6 +67,13 @@ struct MenuBarContent: View {
                 Delivery.requestAccessibilityPermission()
             }
         }
+        if settings.addToTaskList && !RemindersService.shared.isAuthorized {
+            Button("⚠︎ Can't add to-dos without Reminders access. Open Settings…") {
+                NSWorkspace.shared.open(
+                    URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")!
+                )
+            }
+        }
     }
 
     // MARK: - Configuration
@@ -175,6 +182,34 @@ struct MenuBarContent: View {
             } label: {
                 Text(settings.showNotification ? "✓  Show notification" : "    Show notification")
             }
+            Divider()
+            Button {
+                toggleTaskList()
+            } label: {
+                Text(settings.addToTaskList ? "✓  Add to-dos to Reminders" : "    Add to-dos to Reminders")
+            }
+        }
+    }
+
+    /// Asking for Reminders access at the moment the user switches this on is
+    /// the only point where the request explains itself. Requesting it at launch
+    /// would be a prompt with no context, and requesting it mid-dictation would
+    /// interrupt the thing the app exists to keep uninterrupted.
+    private func toggleTaskList() {
+        guard !settings.addToTaskList else {
+            settings.addToTaskList = false
+            return
+        }
+        if RemindersService.shared.isAuthorized {
+            settings.addToTaskList = true
+            return
+        }
+        Task { @MainActor in
+            // Leave the setting on even when access is refused: the warning row
+            // above then explains why nothing is filing, which is more use than
+            // a switch that silently flips itself back.
+            await RemindersService.shared.requestAccess()
+            settings.addToTaskList = true
         }
     }
 
