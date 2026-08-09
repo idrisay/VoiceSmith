@@ -21,6 +21,8 @@ enum VoiceSmithError: LocalizedError, Equatable {
     case accessibilityPermissionDenied
     case remindersPermissionDenied
     case remindersUnavailable(detail: String)
+    case calendarPermissionDenied
+    case calendarUnavailable(detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -58,6 +60,10 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return "VoiceSmith can't add to your reminders."
         case .remindersUnavailable(let detail):
             return "Reminders didn't accept the tasks: \(detail)"
+        case .calendarPermissionDenied:
+            return "VoiceSmith can't add to your calendar."
+        case .calendarUnavailable(let detail):
+            return "Calendar didn't accept the event: \(detail)"
         }
     }
 
@@ -93,6 +99,10 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return "Edit the transcript, or switch to a different text provider."
         case .remindersPermissionDenied:
             return "Adding to-dos needs access to Reminders. Open System Settings › Privacy & Security › Reminders and enable VoiceSmith. Your dictation was delivered as usual."
+        case .calendarPermissionDenied:
+            return "Adding events needs access to Calendar. Open System Settings › Privacy & Security › Calendars and enable VoiceSmith. Your dictation was delivered as usual."
+        case .calendarUnavailable:
+            return "The text was delivered as usual — only the event didn't save. Check that Calendar has at least one editable calendar."
         case .remindersUnavailable:
             return "The text was delivered as usual — only the to-dos didn't file. Check that Reminders has at least one editable list."
         case .accessibilityPermissionDenied:
@@ -123,6 +133,8 @@ enum VoiceSmithError: LocalizedError, Equatable {
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         case .remindersPermissionDenied:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
+        case .calendarPermissionDenied:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
         case .noInputDevice, .inputDeviceDisconnected:
             return URL(string: "x-apple.systempreferences:com.apple.preference.sound")
         default:

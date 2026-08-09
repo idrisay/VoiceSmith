@@ -42,12 +42,41 @@ final class AppController: ObservableObject {
     /// "thank you" or a stray silence, but it looks identical to a broken
     /// feature unless the app says so — and the user pressed a key on purpose,
     /// so they are owed an answer either way.
+    /// Where something was filed, so the confirmation can offer the right app.
+    /// Sending someone to Reminders to look for a calendar entry is a small
+    /// betrayal of a button that says "open".
+    enum Destination: Equatable, Hashable {
+        case reminders, calendar
+
+        var appName: String {
+            switch self {
+            case .reminders: return "Reminders"
+            case .calendar:  return "Calendar"
+            }
+        }
+
+        /// Verified to resolve: ical:// → Calendar.app,
+        /// x-apple-reminderkit:// → Reminders.app.
+        var url: URL {
+            switch self {
+            case .reminders: return URL(string: "x-apple-reminderkit://")!
+            case .calendar:  return URL(string: "ical://")!
+            }
+        }
+    }
+
     enum TodoOutcome: Equatable, Hashable {
-        case filed([ExtractedTask])
+        case filed([ExtractedTask], to: Destination)
         /// Nothing in what was said described something to do. Carries the
         /// transcript, because seeing what was heard is usually the explanation.
         case nothingFound(heard: String)
     }
+    /// An offer to file what the last dictation sounded like. Purely additive:
+    /// the text has already been delivered by the time this appears, so
+    /// ignoring it costs nothing and is the common case.
+    @Published private(set) var offeredAction: DetectedAction?
+    private var filedEventID: String?
+
     /// Non-nil only while the confirmation is on screen. Undo lives exactly as
     /// long as this does; past that, Reminders owns what was filed.
     @Published private(set) var todoOutcome: TodoOutcome?
@@ -97,6 +126,8 @@ final class AppController: ObservableObject {
         // starts — the panel that offered it is about to show something else.
         todoOutcome = nil
         filedReminderIDs = []
+        offeredAction = nil
+        filedEventID = nil
 
         // Capture the focused field *first*: showing the panel or requesting
         // permission can move focus, and by then the caret is gone.
@@ -139,6 +170,7 @@ final class AppController: ObservableObject {
         pendingAudio = nil
         todoOutcome = nil
         filedReminderIDs = []
+        offeredAction = nil
         windowDismisser?()
     }
 
@@ -258,6 +290,17 @@ final class AppController: ObservableObject {
                 }
                 try Task.checkCancellation()
 
+                // 6. Offer to file it, if it sounded like an appointment or a
+                // task. Deliberately after delivery and deliberately silent on
+                // failure: this is a bonus button, and a dictation must never be
+                // slower or less reliable because of one.
+                if settings.offerDetectedActions,
+                   improvementError == nil,
+                   ActionHint.isPresent(in: note.displayText) {
+                    offeredAction = try? await ProviderFactory.text(settings)
+                        .detectAction(in: note.displayText, now: Date())
+                }
+
                 phase = .done(noteID: note.id)
 
                 // Improvement failing is the more serious of the two — it means
@@ -270,7 +313,7 @@ final class AppController: ObservableObject {
                     statusDetail = ""
                     // Hold the panel open while there's an undo to offer; the
                     // tasks are in the user's own list from here on.
-                    if todoOutcome == nil { windowDismisser?() }
+                    if todoOutcome == nil, offeredAction == nil { windowDismisser?() }
                 }
             } catch is CancellationError {
                 phase = .idle
@@ -390,7 +433,7 @@ final class AppController: ObservableObject {
             tasks,
             toListWithID: settings.reminderListID
         )
-        todoOutcome = .filed(tasks)
+        todoOutcome = .filed(tasks, to: .reminders)
 
         if settings.showNotification {
             Delivery.notify(
@@ -404,8 +447,58 @@ final class AppController: ObservableObject {
     /// it's on screen — past that the reminders belong to Reminders.
     func undoFiledTasks() {
         RemindersService.shared.remove(identifiers: filedReminderIDs)
+        if let filedEventID { CalendarService.shared.remove(identifier: filedEventID) }
+        self.filedEventID = nil
         filedReminderIDs = []
         todoOutcome = nil
+        statusDetail = ""
+        windowDismisser?()
+    }
+
+    // MARK: - Offered actions
+
+    /// The user picked a destination for what was detected.
+    ///
+    /// Permission is asked for here, at the only moment it explains itself: they
+    /// have just pressed a button that says "Add to Calendar". Asking at launch
+    /// would be a prompt with no context, and macOS won't list the app under
+    /// Privacy & Security until it has asked at least once — so directing them
+    /// there first would send them looking for a row that doesn't exist.
+    func acceptOfferedAction(as kind: DetectedAction.Kind) {
+        guard let action = offeredAction else { return }
+        offeredAction = nil
+
+        Task { @MainActor in
+            do {
+                switch kind {
+                case .event:
+                    if !CalendarService.shared.isAuthorized, !CalendarService.shared.hasBeenAsked {
+                        await CalendarService.shared.requestAccess()
+                    }
+                    filedEventID = try CalendarService.shared.save(
+                        action, toCalendarWithID: settings.calendarID
+                    )
+                    todoOutcome = .filed([action.asTask], to: .calendar)
+                case .reminder:
+                    if !RemindersService.shared.isAuthorized, !RemindersService.shared.hasBeenAsked {
+                        await RemindersService.shared.requestAccess()
+                    }
+                    filedReminderIDs = try RemindersService.shared.save(
+                        [action.asTask], toListWithID: settings.reminderListID
+                    )
+                    todoOutcome = .filed([action.asTask], to: .reminders)
+                }
+            } catch let error as VoiceSmithError {
+                present(error, keepingAudio: nil)
+            } catch {
+                present(.calendarUnavailable(detail: error.localizedDescription), keepingAudio: nil)
+            }
+        }
+    }
+
+    /// No thanks. The text is already where it was going.
+    func declineOfferedAction() {
+        offeredAction = nil
         statusDetail = ""
         windowDismisser?()
     }
@@ -415,6 +508,7 @@ final class AppController: ObservableObject {
     /// the common one.
     func acknowledgeTodoOutcome() {
         filedReminderIDs = []
+        filedEventID = nil
         todoOutcome = nil
         statusDetail = ""
         windowDismisser?()

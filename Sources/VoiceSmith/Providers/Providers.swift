@@ -28,6 +28,13 @@ extension TextProvider {
         try await complete(system: Prompts.improvement(for: mode, language: language), user: text)
     }
 
+    /// Classifies a dictation that tripped `ActionHint` — is it an appointment,
+    /// a task, or just a sentence that happened to contain "remind me"?
+    func detectAction(in text: String, now: Date) async throws -> DetectedAction? {
+        let raw = try await complete(system: Prompts.actionDetection(now: now), user: text)
+        return ActionDetection.parse(raw, now: now)
+    }
+
     /// Pulls action items out of a dictation.
     ///
     /// An empty result is a normal, common outcome — most dictation isn't a list
@@ -71,6 +78,57 @@ enum Prompts {
 
     private static func languageInstruction(_ language: String) -> String {
         language == "auto" ? "the same language the transcript is in" : Locale.current.localizedString(forIdentifier: language) ?? language
+    }
+
+    /// Decides what a dictation was trying to become.
+    ///
+    /// Returning "none" is the expected answer most of the time: the local
+    /// prefilter that gates this call is tuned to let borderline phrasing
+    /// through, on the assumption that the model is the better judge. Saying so
+    /// plainly in the prompt is what keeps it from inventing a meeting out of
+    /// "the meeting went well".
+    static func actionDetection(now: Date) -> String {
+        let iso = DateFormatter()
+        iso.locale = Locale(identifier: "en_US_POSIX")
+        iso.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        let weekday = DateFormatter()
+        weekday.locale = Locale(identifier: "en_US_POSIX")
+        weekday.dateFormat = "EEEE"
+
+        return """
+        You decide whether dictated speech was asking for something to be added \
+        to a calendar or a to-do list.
+
+        Reply with one JSON object:
+          "kind":  "event", "reminder", or "none"
+          "title": string — short and imperative for a reminder, descriptive for \
+        an event. Null when kind is "none".
+          "notes": string or null
+          "start": "YYYY-MM-DDTHH:MM", or "YYYY-MM-DD" when no time was given, \
+        or null
+          "end":   "YYYY-MM-DDTHH:MM" or null — only when an end or a duration \
+        was actually stated
+
+        How to choose:
+        - "event" when it happens at a time, with other people, somewhere: \
+        meetings, appointments, calls, flights, dinners.
+        - "reminder" when it is something to do, whether or not it has a deadline.
+        - "none" for everything else. Describing a meeting that already happened, \
+        an opinion about a schedule, or a sentence that merely contains the word \
+        "remind" is not a request. When unsure, answer "none".
+
+        Rules:
+        - Never invent a time, a place, a person, or a duration. Anything not \
+        said is null.
+        - "event" requires a date. Without one it is a reminder.
+        - Today is \(iso.string(from: now)), a \(weekday.string(from: now)). \
+        Resolve "tomorrow", "next Tuesday", "this afternoon" against it.
+        - Strip the framing from titles: "remind me to", "don't forget to", \
+        "can you add".
+        - Keep the speaker's own language. Never translate.
+
+        Return only the JSON object. No prose, no code fences.
+        """
     }
 
     /// Task extraction asks for JSON rather than prose, so it deliberately does

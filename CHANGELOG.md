@@ -6,6 +6,26 @@ heading format matters: `## <version>`.
 
 ## 1.3
 
+**VoiceSmith now notices when you've dictated an appointment or something to
+do.** Say "remind me to call the dentist tomorrow" or "schedule a team sync
+Thursday at three" and the popup offers to file it — in **Calendar** or in
+**Reminders**, your choice.
+
+- **Your text is inserted either way.** Detection runs *after* delivery, so it
+  can never delay your words or lose them. Ignore the offer and it disappears.
+- **Both destinations are always one click away.** "Remind me to book the room"
+  and "schedule the room booking" are the same thought, so the guess only
+  decides which button is emphasised.
+- Once filed, the confirmation offers to open the app it went to.
+- Works in English and Turkish. A local phrase match gates it, so ordinary
+  dictation costs nothing extra — no phrase, no model call.
+- Turn it off in Settings › General, and pick which calendar there too.
+- Calendar access is asked for the first time you accept an event.
+
+Notes are not a destination yet: Apple ships no public API for creating them.
+
+### Triggers
+
 - **Both double-tap triggers are yours to choose.** Setup now asks which taps
   you want, and Settings › Shortcut changes them later — `Shift`, `Control`,
   `Option`, `Command`, or off, for dictation and for to-do capture

@@ -25,6 +25,8 @@ struct RecordingView: View {
                 ErrorPill(controller: controller, error: error)
             case .recording:
                 recordingPill
+            case .done where controller.offeredAction != nil:
+                ActionOfferPill(controller: controller)
             case .done where controller.todoOutcome != nil:
                 TodoOutcomePill(controller: controller)
             default:
@@ -131,6 +133,91 @@ struct RecordingView: View {
     }
 }
 
+// MARK: - Detected action
+
+/// An offer, not a decision.
+///
+/// By the time this appears the text is already in the user's field — the whole
+/// point of the ordering. So doing nothing is a complete and correct response,
+/// and it says so by dismissing itself. What it must not do is guess: "remind me
+/// to book the room" and "schedule the room booking" are the same thought, so
+/// both destinations are one click away and the model's guess only decides which
+/// is emphasised.
+private struct ActionOfferPill: View {
+    @ObservedObject var controller: AppController
+
+    /// Longer than the to-do confirmation, because this one asks for a decision
+    /// rather than reporting a finished one.
+    private static let secondsOnScreen = 7
+
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if let action = controller.offeredAction {
+                HStack(spacing: 7) {
+                    Image(systemName: action.kind == .event ? "calendar" : "checklist")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tint)
+                    Text(action.kind == .event ? "Sounds like an event" : "Sounds like a reminder")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(action.title)
+                        .font(.system(size: 12))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let start = action.start {
+                        Text(start, format: action.isAllDay
+                             ? .dateTime.weekday(.abbreviated).day().month(.abbreviated)
+                             : .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    // The guess only decides which is emphasised; both stay one
+                    // click away. Calendar is unavailable without a date —
+                    // an event that happens at no particular time isn't one.
+                    if action.kind == .event {
+                        Button("Calendar") { controller.acceptOfferedAction(as: .event) }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Reminder") { controller.acceptOfferedAction(as: .reminder) }
+                            .controlSize(.small)
+                    } else {
+                        Button("Reminder") { controller.acceptOfferedAction(as: .reminder) }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Calendar") { controller.acceptOfferedAction(as: .event) }
+                            .controlSize(.small)
+                            .disabled(action.start == nil)
+                    }
+                    Spacer()
+                    Button("No thanks") { controller.declineOfferedAction() }
+                        .controlSize(.small)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 330, alignment: .leading)
+        .background(PillBackground())
+        .onHover { hovering = $0 }
+        .task(id: controller.offeredAction) {
+            var remaining = Self.secondsOnScreen
+            while remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                if hovering { continue }
+                remaining -= 1
+            }
+            controller.declineOfferedAction()
+        }
+    }
+}
+
 // MARK: - To-do outcome
 
 /// The one place the app shows its work before getting out of the way.
@@ -154,8 +241,8 @@ private struct TodoOutcomePill: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             switch controller.todoOutcome {
-            case .filed(let tasks):
-                filed(tasks)
+            case .filed(let tasks, let destination):
+                filed(tasks, destination)
             case .nothingFound(let heard):
                 nothingFound(heard)
             case nil:
@@ -180,12 +267,12 @@ private struct TodoOutcomePill: View {
     }
 
     @ViewBuilder
-    private func filed(_ tasks: [ExtractedTask]) -> some View {
+    private func filed(_ tasks: [ExtractedTask], _ destination: AppController.Destination) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: "checklist")
+            Image(systemName: destination == .calendar ? "calendar" : "checklist")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.tint)
-            Text(tasks.count == 1 ? "1 to-do added" : "\(tasks.count) to-dos added")
+            Text(headline(tasks.count, destination))
                 .font(.system(size: 12, weight: .semibold))
         }
 
@@ -219,10 +306,17 @@ private struct TodoOutcomePill: View {
             Button("Undo") { controller.undoFiledTasks() }
                 .controlSize(.small)
             Spacer()
-            Button("Open Reminders") {
-                NSWorkspace.shared.open(URL(string: "x-apple-reminderkit://")!)
+            Button("Open \(destination.appName)") {
+                NSWorkspace.shared.open(destination.url)
             }
             .controlSize(.small)
+        }
+    }
+
+    private func headline(_ count: Int, _ destination: AppController.Destination) -> String {
+        switch destination {
+        case .calendar:  return "Added to Calendar"
+        case .reminders: return count == 1 ? "1 to-do added" : "\(count) to-dos added"
         }
     }
 

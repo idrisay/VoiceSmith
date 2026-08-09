@@ -46,6 +46,17 @@ final class AppSettings: ObservableObject {
     @Published var todoTapModifier: TapModifier {
         didSet { defaults.set(todoTapModifier.rawValue, forKey: "todoTapModifier") }
     }
+    /// Offer to file an event or reminder when a dictation sounds like one.
+    /// On by default: it only ever adds a button, never changes what the
+    /// dictation itself does, and costs a model call only when a local phrase
+    /// match already suggests it's worth one.
+    @Published var offerDetectedActions: Bool {
+        didSet { defaults.set(offerDetectedActions, forKey: "offerDetectedActions") }
+    }
+    /// Empty means whichever calendar Calendar itself treats as the default.
+    @Published var calendarID: String {
+        didSet { defaults.set(calendarID, forKey: "calendarID") }
+    }
     @Published var addToTaskList: Bool {
         didSet { defaults.set(addToTaskList, forKey: "addToTaskList") }
     }
@@ -96,6 +107,8 @@ final class AppSettings: ObservableObject {
             "modeID": "professional",
             "language": "auto",
             "addToTaskList": false,
+            "offerDetectedActions": true,
+            "calendarID": "",
             "todoTapModifier": TapModifier.option.rawValue,
             "reminderListID": "",
             "copyToClipboard": true,
@@ -120,6 +133,8 @@ final class AppSettings: ObservableObject {
         modeID = defaults.string(forKey: "modeID") ?? "professional"
         language = defaults.string(forKey: "language") ?? "auto"
         addToTaskList = defaults.bool(forKey: "addToTaskList")
+        offerDetectedActions = defaults.bool(forKey: "offerDetectedActions")
+        calendarID = defaults.string(forKey: "calendarID") ?? ""
         // Migration: both triggers used to be on/off booleans on a fixed
         // modifier. Anyone who had switched one off keeps it off.
         todoTapModifier = Self.storedModifier(

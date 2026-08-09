@@ -11,9 +11,7 @@ import Foundation
 final class RemindersService {
     static let shared = RemindersService()
 
-    /// One store for the process. EventKit caches against it, and creating a new
-    /// one per write loses the permission state we just established.
-    private let store = EKEventStore()
+    private var store: EKEventStore { EventKitStore.shared }
 
     private init() {}
 

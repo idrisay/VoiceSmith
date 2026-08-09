@@ -52,6 +52,36 @@ private struct RemindersSettings: View {
     }
 }
 
+/// Destination calendar, and what the offer actually does.
+private struct CalendarSettings: View {
+    @ObservedObject var settings: AppSettings
+
+    @State private var calendars: [(id: String, title: String)] = []
+    @State private var isAuthorized = CalendarService.shared.isAuthorized
+
+    var body: some View {
+        Group {
+            if isAuthorized {
+                Picker("Calendar", selection: $settings.calendarID) {
+                    Text("Default calendar").tag("")
+                    if !calendars.isEmpty { Divider() }
+                    ForEach(calendars, id: \.id) { calendar in
+                        Text(calendar.title).tag(calendar.id)
+                    }
+                }
+            }
+            Text("When a dictation sounds like an appointment or something to do — \u{201C}remind me to…\u{201D}, \u{201C}schedule a…\u{201D} — the popup offers to file it. Your text is inserted either way; ignoring the offer changes nothing. Access is asked for the first time you accept one.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear {
+            isAuthorized = CalendarService.shared.isAuthorized
+            calendars = isAuthorized ? CalendarService.shared.availableCalendars() : []
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var router: WindowRouter
@@ -93,6 +123,10 @@ private struct GeneralPane: View {
                 Toggle("Insert into the focused text field", isOn: $settings.autoPaste)
                 Toggle("Show a notification", isOn: $settings.showNotification)
 
+                Toggle("Offer to add events and reminders", isOn: $settings.offerDetectedActions)
+                if settings.offerDetectedActions {
+                    CalendarSettings(settings: settings)
+                }
                 Toggle("Add to-dos to Reminders from every dictation", isOn: $settings.addToTaskList)
                 if settings.addToTaskList || settings.todoTapModifier != .off {
                     RemindersSettings(settings: settings)
