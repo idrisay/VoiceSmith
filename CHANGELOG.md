@@ -4,6 +4,16 @@ Each released version, newest first. The release workflow reads the section
 matching the tag and puts it at the top of the GitHub release notes, so the
 heading format matters: `## <version>`.
 
+## 1.4
+
+- The action-detection phrase list is **English only**. The Turkish phrases
+  added in 1.3 are gone: a hand-written list per language is something nobody
+  can verify or maintain, and half-covering two languages was worse than being
+  clear about the scope. Dictating in Turkish still works exactly as it did —
+  only the "Sounds like an event" offer is English-gated.
+- Dictation, cleanup, and double-tap to-do capture are untouched and remain
+  language-neutral.
+
 ## 1.3
 
 **VoiceSmith now notices when you've dictated an appointment or something to

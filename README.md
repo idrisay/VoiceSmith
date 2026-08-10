@@ -47,12 +47,6 @@ Pick which list in **Settings › General**. To file to-dos from *every* dictati
 
 Reminders access is asked for the first time you use it.
 
-### It also notices
-
-Dictate normally with `Shift` and say something like *"remind me to call the dentist tomorrow"* or *"schedule a team sync Thursday at three"*, and the popup offers to file it — **Calendar** or **Reminders**, your choice, with a button to open whichever it went to.
-
-Your text is inserted either way. Detection runs *after* delivery, so it can never delay your words or lose them, and ignoring the offer changes nothing. A local phrase match in English and Turkish gates it, so ordinary dictation costs no extra model call. Turn it off, and pick which calendar, in **Settings › General**.
-
 ---
 
 ## Requirements
