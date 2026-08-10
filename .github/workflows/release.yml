@@ -52,6 +52,11 @@ jobs:
             exit 1
           fi
 
+      - name: Test
+        # Before packaging, not after: a published release that fails its own
+        # tests is worse than a release that never happened.
+        run: swift test
+
       - name: Build and package
         # No DEVELOPER_ID or NOTARY_PROFILE, so this signs ad-hoc. To sign for
         # real, import a Developer ID certificate into a temporary keychain here

@@ -1,0 +1,36 @@
+# Builds the app and runs the test suite on every push to main and every pull
+# request.
+#
+# Tags are deliberately not covered here — a tag push runs Release, which runs
+# the same tests before it packages anything.
+name: Tests
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on the runner
+        # Package.swift needs swift-tools-version 6.0, and the image default
+        # is not always the newest installed. Picking the highest version
+        # keeps this working as the runner images move on.
+        run: |
+          NEWEST="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$NEWEST"
+          swift --version
+
+      - name: Build
+        # Separately from the tests, because "the app no longer compiles" and
+        # "a test failed" are different problems and the log should say which.
+        run: swift build
+
+      - name: Test
+        run: swift test

@@ -9,6 +9,12 @@ let package = Package(
             name: "VoiceSmith",
             path: "Sources/VoiceSmith",
             swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "VoiceSmithTests",
+            dependencies: ["VoiceSmith"],
+            path: "Tests/VoiceSmithTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]
 )
