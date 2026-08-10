@@ -4,6 +4,19 @@ Each released version, newest first. The release workflow reads the section
 matching the tag and puts it at the top of the GitHub release notes, so the
 heading format matters: `## <version>`.
 
+## 1.6
+
+**VoiceSmith is now MIT licensed.** Use it, change it, ship it, sell it — keep
+the copyright notice and there's nothing else owed, no obligation to contribute
+anything back, and no warranty.
+
+Until now the repo had no license file, which doesn't mean "help yourself" — it
+means the opposite. Default copyright applied, so the source was readable and
+nothing more.
+
+The app itself is unchanged from 1.5. If you're already running it, there is
+nothing here worth updating for.
+
 ## 1.5
 
 **VoiceSmith can now be taught the words it keeps getting wrong.** Colleagues'
