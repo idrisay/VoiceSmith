@@ -82,6 +82,71 @@ private struct CalendarSettings: View {
     }
 }
 
+/// Names and jargon the speech model gets wrong.
+///
+/// A plain editable list rather than anything cleverer: the user is the only one
+/// who knows that their colleague is spelled Aylin and their product is evulpo,
+/// and every term they add is one they were already retyping by hand.
+private struct VocabularyEditor: View {
+    @ObservedObject var settings: AppSettings
+
+    @State private var entry = ""
+    @State private var selection: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                TextField("Name, product, or term", text: $entry)
+                    .onSubmit(add)
+                Button("Add", action: add)
+                    .disabled(entry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .controlSize(.small)
+            }
+
+            if settings.vocabularyTerms.isEmpty {
+                Text("Words here are given to the speech model before it listens, so it recognises them instead of guessing. They're also given to the text model, which corrects near-misses it still gets wrong.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                List(selection: $selection) {
+                    ForEach(settings.vocabularyTerms, id: \.self) { term in
+                        Text(term).font(.system(size: 12))
+                    }
+                }
+                .frame(height: 110)
+                .border(Color.secondary.opacity(0.2))
+
+                HStack {
+                    Button("Remove", action: removeSelected)
+                        .disabled(selection.isEmpty)
+                        .controlSize(.small)
+                    Spacer()
+                    Text("\(settings.vocabularyTerms.count) terms")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func add() {
+        let term = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return }
+        // Case-insensitive, because the speech model doesn't care and a list
+        // holding both "Evulpo" and "evulpo" spends the budget twice.
+        guard !settings.vocabularyTerms.contains(where: { $0.caseInsensitiveCompare(term) == .orderedSame })
+        else { entry = ""; return }
+        settings.vocabularyTerms.append(term)
+        entry = ""
+    }
+
+    private func removeSelected() {
+        settings.vocabularyTerms.removeAll { selection.contains($0) }
+        selection = []
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var router: WindowRouter
@@ -149,6 +214,10 @@ private struct GeneralPane: View {
                         }
                     }
                 }
+            }
+
+            Section("Vocabulary") {
+                VocabularyEditor(settings: settings)
             }
 
             Section("Startup") {

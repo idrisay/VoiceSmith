@@ -212,7 +212,8 @@ final class AppController: ObservableObject {
                 let speech = try ProviderFactory.speech(settings)
                 let transcript = try await speech.transcribe(
                     audio: audio,
-                    language: settings.language == "auto" ? nil : settings.language
+                    language: settings.language == "auto" ? nil : settings.language,
+                    vocabulary: settings.vocabulary
                 )
                 try Task.checkCancellation()
 
@@ -243,7 +244,8 @@ final class AppController: ObservableObject {
                         improved = try await text.improve(
                             transcript.text,
                             mode: settings.activeMode,
-                            language: settings.language
+                            language: settings.language,
+                            vocabulary: settings.vocabulary
                         )
                         textProviderName = settings.textProvider.displayName
                         textModelName = settings.textModel
@@ -567,7 +569,8 @@ final class AppController: ObservableObject {
                 let improved = try await provider.improve(
                     note.rawTranscript,
                     mode: mode,
-                    language: settings.language
+                    language: settings.language,
+                    vocabulary: settings.vocabulary
                 )
                 note.improvedText = improved
                 note.mode = mode.name

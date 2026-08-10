@@ -4,6 +4,22 @@ Each released version, newest first. The release workflow reads the section
 matching the tag and puts it at the top of the GitHub release notes, so the
 heading format matters: `## <version>`.
 
+## 1.5
+
+**VoiceSmith can now be taught the words it keeps getting wrong.** Colleagues'
+names, your product, your team's jargon — add them once in **Settings › General
+› Vocabulary** and they stop coming back as whichever real word sounded closest.
+
+- **The words are given to the speech model before it listens**, so it
+  recognises them rather than guessing. This works with every speech provider —
+  Apple, Whisper.cpp, OpenAI, Groq, Deepgram, AssemblyAI — each of which wants
+  the list in a different shape; VoiceSmith sends whichever one applies.
+- **The text model gets them too**, and fixes the near-misses that still get
+  through: "e-vulpo" becomes "evulpo". It corrects only what was clearly meant,
+  and never introduces a term you didn't say.
+- Re-improving an old note from history uses the vocabulary as well.
+- An empty list changes nothing about how dictation works today.
+
 ## 1.4
 
 - The action-detection phrase list is **English only**. The Turkish phrases

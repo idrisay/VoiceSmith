@@ -8,7 +8,7 @@ struct WhisperAPIProvider: SpeechProvider {
     let apiKey: String
     let model: String
 
-    func transcribe(audio: URL, language: String?) async throws -> Transcript {
+    func transcribe(audio: URL, language: String?, vocabulary: Vocabulary) async throws -> Transcript {
         let boundary = "voicesmith.\(UUID().uuidString)"
         var request = URLRequest(url: URL(string: "\(baseURL)/audio/transcriptions")!)
         request.httpMethod = "POST"
@@ -18,6 +18,11 @@ struct WhisperAPIProvider: SpeechProvider {
         var fields: [String: String] = ["model": model, "response_format": "json"]
         if let language, language != "auto" {
             fields["language"] = String(language.prefix(2))
+        }
+        // Whisper reads this as text preceding the audio, which biases decoding
+        // toward the spellings in it.
+        if !vocabulary.isEmpty {
+            fields["prompt"] = vocabulary.promptText
         }
         request.httpBody = try Self.multipartBody(
             boundary: boundary,
@@ -86,7 +91,7 @@ struct DeepgramProvider: SpeechProvider {
     let apiKey: String
     let model: String
 
-    func transcribe(audio: URL, language: String?) async throws -> Transcript {
+    func transcribe(audio: URL, language: String?, vocabulary: Vocabulary) async throws -> Transcript {
         var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
         var query = [
             URLQueryItem(name: "model", value: model),
@@ -97,6 +102,10 @@ struct DeepgramProvider: SpeechProvider {
             query.append(URLQueryItem(name: "language", value: String(language.prefix(2))))
         } else {
             query.append(URLQueryItem(name: "detect_language", value: "true"))
+        }
+        // Deepgram takes one repeated parameter per term rather than a list.
+        for term in vocabulary.boostTerms {
+            query.append(URLQueryItem(name: "keywords", value: term))
         }
         components.queryItems = query
 
@@ -137,9 +146,11 @@ struct AssemblyAIProvider: SpeechProvider {
     let apiKey: String
     let model: String
 
-    func transcribe(audio: URL, language: String?) async throws -> Transcript {
+    func transcribe(audio: URL, language: String?, vocabulary: Vocabulary) async throws -> Transcript {
         let uploadURL = try await upload(audio)
-        let id = try await requestTranscript(audioURL: uploadURL, language: language)
+        let id = try await requestTranscript(
+            audioURL: uploadURL, language: language, vocabulary: vocabulary
+        )
         return try await poll(id: id)
     }
 
@@ -157,12 +168,17 @@ struct AssemblyAIProvider: SpeechProvider {
         return url
     }
 
-    private func requestTranscript(audioURL: String, language: String?) async throws -> String {
+    private func requestTranscript(
+        audioURL: String, language: String?, vocabulary: Vocabulary
+    ) async throws -> String {
         var body: [String: Any] = ["audio_url": audioURL, "speech_model": model, "punctuate": true]
         if let language, language != "auto" {
             body["language_code"] = String(language.prefix(2))
         } else {
             body["language_detection"] = true
+        }
+        if !vocabulary.isEmpty {
+            body["word_boost"] = vocabulary.boostTerms
         }
 
         var request = URLRequest(url: URL(string: "https://api.assemblyai.com/v2/transcript")!)

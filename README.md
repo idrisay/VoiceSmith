@@ -181,6 +181,14 @@ Groq's `whisper-large-v3-turbo` handles **99 languages**, and language is set to
 
 Accuracy is uneven across languages — expect less from low-resource ones than from English.
 
+### Vocabulary
+
+Speech models don't know your colleagues, your product, or your team's jargon — a name they've never seen comes back as whichever real word sounds closest, every time. Add those words in **Settings › General › Vocabulary** and they're handed to the speech model *before* it listens, so it recognises them instead of guessing.
+
+They also go to the text model, which fixes the near-misses that get through — a transcript that says "e-vulpo" comes out as "evulpo". It only corrects words that were clearly meant; it never adds one you didn't say.
+
+Works with every speech provider. Each takes a different form of the same list, and VoiceSmith sends whichever one the selected provider expects.
+
 ### Modes
 
 Improvement style is a mode: Professional, Friendly, Concise, Detailed, Email, Meeting Notes, Markdown, or Verbatim. Duplicate any of them in **Settings › Modes** to write your own prompt.

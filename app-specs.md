@@ -253,6 +253,46 @@ Every one of these must have defined behaviour before implementation begins.
 - The detected language is stored on the note.
 - Improvement is performed in the transcript's language, never translated unless the user asks.
 
+## Vocabulary
+
+Speech models know common words. They do not know a user's colleagues, their
+product, or their team's jargon — and a name the model has never seen comes back
+as whichever real word sounds closest, every single time. Retyping "evulpo" after
+every dictation is the kind of small, repeated cost that makes people stop
+dictating.
+
+So Settings holds a list of terms the user adds once, and every stage of the
+pipeline is told about them.
+
+**Given to the speech model, because biasing beats correcting.** Every backend
+supports this and no two agree on the shape: Whisper wants a sentence-like
+`prompt`, whisper.cpp the same through `--prompt`, Deepgram one repeated
+`keywords` parameter per term, AssemblyAI a `word_boost` array, Apple
+`contextualStrings`. The terms are held once and each backend is handed the form
+it asks for, so adding a term never means thinking about which provider is
+selected.
+
+**Given to the text model too, because biasing only improves the odds.** When the
+transcript still says "e-vulpo", something downstream has to know what was meant.
+The instruction is worded to fix clear near-misses only — the model must never
+introduce a term that was not said, which would be hallucination dressed up as a
+feature.
+
+Rules:
+
+- The prompt-shaped form is a comma-separated list, not a sentence. Whisper reads
+  the prompt as preceding context, and a bare list biases toward the words
+  themselves rather than toward whatever sentence they were wrapped in.
+- The list is capped before it is sent. Whisper's prompt window is about 224
+  tokens and it silently drops the overflow, so the cap lives in one place where
+  it can be reasoned about rather than being discovered as terms mysteriously not
+  working.
+- Terms are de-duplicated case-insensitively. The speech model does not
+  distinguish "Evulpo" from "evulpo", and holding both spends a small budget
+  twice.
+- An empty list changes nothing. No prompt field, no keywords, no extra line in
+  the improvement prompt.
+
 ---
 
 # AI Text Improvement

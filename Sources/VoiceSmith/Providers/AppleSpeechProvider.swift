@@ -6,7 +6,7 @@ import Speech
 struct AppleSpeechProvider: SpeechProvider {
     let displayName = "Apple Speech"
 
-    func transcribe(audio: URL, language: String?) async throws -> Transcript {
+    func transcribe(audio: URL, language: String?, vocabulary: Vocabulary) async throws -> Transcript {
         let status = await Self.requestAuthorization()
         guard status == .authorized else { throw VoiceSmithError.speechPermissionDenied }
 
@@ -24,6 +24,11 @@ struct AppleSpeechProvider: SpeechProvider {
 
         let request = SFSpeechURLRecognitionRequest(url: audio)
         request.shouldReportPartialResults = false
+        // The Speech framework's own biasing hook — names and jargon it would
+        // otherwise never guess.
+        if !vocabulary.isEmpty {
+            request.contextualStrings = vocabulary.boostTerms
+        }
         // Keep audio on the machine even when the network path is available.
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true

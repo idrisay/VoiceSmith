@@ -74,6 +74,12 @@ final class AppSettings: ObservableObject {
     @Published var hasCompletedOnboarding: Bool {
         didSet { defaults.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
     }
+    /// Names, product names, and jargon the speech model gets wrong.
+    @Published var vocabularyTerms: [String] {
+        didSet { defaults.set(vocabularyTerms, forKey: "vocabularyTerms") }
+    }
+    var vocabulary: Vocabulary { Vocabulary(vocabularyTerms) }
+
     @Published var customModes: [ImprovementMode] {
         didSet {
             if let data = try? JSONEncoder().encode(customModes) {
@@ -153,6 +159,8 @@ final class AppSettings: ObservableObject {
         )
         shortcutKeyCode = UInt32(defaults.integer(forKey: "shortcutKeyCode"))
         shortcutModifiers = UInt32(defaults.integer(forKey: "shortcutModifiers"))
+
+        vocabularyTerms = defaults.stringArray(forKey: "vocabularyTerms") ?? []
 
         if let data = defaults.data(forKey: "customModes"),
            let decoded = try? JSONDecoder().decode([ImprovementMode].self, from: data) {

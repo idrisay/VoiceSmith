@@ -21,7 +21,7 @@ struct WhisperCPPProvider: SpeechProvider {
         candidateBinaries.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    func transcribe(audio: URL, language: String?) async throws -> Transcript {
+    func transcribe(audio: URL, language: String?, vocabulary: Vocabulary) async throws -> Transcript {
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else {
             throw VoiceSmithError.localModelUnavailable(
                 provider: displayName,
@@ -48,6 +48,9 @@ struct WhisperCPPProvider: SpeechProvider {
             arguments.append(contentsOf: ["-l", String(language.prefix(2))])
         } else {
             arguments.append(contentsOf: ["-l", "auto"])
+        }
+        if !vocabulary.isEmpty {
+            arguments.append(contentsOf: ["--prompt", vocabulary.promptText])
         }
 
         let output = try Self.run(binaryPath, arguments: arguments, provider: displayName)
