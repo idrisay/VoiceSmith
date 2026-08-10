@@ -259,4 +259,4 @@ Honest gaps, so you know what you're getting:
 
 ## License
 
-No license has been chosen yet, so default copyright applies: the source is readable here, but not licensed for reuse or redistribution. If you want others to be able to use or modify it, add a license file.
+[MIT](LICENSE). Use it, change it, ship it, sell it — keep the copyright notice and it's yours to do anything with. There's no warranty, and no obligation to contribute anything back.
