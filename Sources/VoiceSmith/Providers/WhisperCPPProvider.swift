@@ -38,11 +38,13 @@ struct WhisperCPPProvider: SpeechProvider {
         let wav = try await Self.convertToWAV(audio)
         defer { try? FileManager.default.removeItem(at: wav) }
 
+        // No --output-txt: it takes no value, so passing "false" turned txt
+        // output *on* and left "false" to be read as a second input file.
+        // Transcription comes back on stdout, and file output is off by default.
         var arguments = [
             "-m", modelPath,
             "-f", wav.path,
             "--no-timestamps",
-            "--output-txt", "false",
         ]
         if let language, language != "auto" {
             arguments.append(contentsOf: ["-l", String(language.prefix(2))])
@@ -75,7 +77,11 @@ struct WhisperCPPProvider: SpeechProvider {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        // Discarded, not piped: whisper.cpp is chatty on stderr, and nothing
+        // here ever read that pipe. Once it filled, the child would block
+        // writing to it and `waitUntilExit()` would never return — a recording
+        // panel spinning forever with no error to show for it.
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -137,6 +143,17 @@ struct WhisperCPPProvider: SpeechProvider {
 
         writerInput.markAsFinished()
         await writer.finishWriting()
+
+        // The loop above ends when `copyNextSampleBuffer()` returns nil, which
+        // means either "that was all of it" or "the read failed part-way". Left
+        // unchecked, a failure yields a short WAV that transcribes perfectly
+        // into half a dictation.
+        guard reader.status == .completed else {
+            throw VoiceSmithError.transcriptionFailed(
+                provider: "Whisper.cpp",
+                detail: reader.error?.localizedDescription ?? "the recording could only be read part-way"
+            )
+        }
 
         guard writer.status == .completed else {
             throw VoiceSmithError.transcriptionFailed(

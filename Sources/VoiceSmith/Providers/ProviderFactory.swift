@@ -18,9 +18,14 @@ enum ProviderFactory {
         case .appleSpeech:
             return AppleSpeechProvider()
         case .whisperCPP:
-            let binary = UserDefaults.standard.string(forKey: "whisperBinaryPath")
-                ?? WhisperCPPProvider.discoverBinary()
-                ?? "/opt/homebrew/bin/whisper-cli"
+            // Emptied rather than nil: clearing the field in Settings persists
+            // "", which `??` would happily accept as a path and turn into "no
+            // whisper.cpp binary at ". Clearing it should hand the search back
+            // to auto-discovery, which is what it looks like it does.
+            let configuredBinary = UserDefaults.standard.string(forKey: "whisperBinaryPath")
+            let binary = configuredBinary?.isEmpty == false
+                ? configuredBinary!
+                : WhisperCPPProvider.discoverBinary() ?? "/opt/homebrew/bin/whisper-cli"
             let modelPath = UserDefaults.standard.string(forKey: "whisperModelPath") ?? ""
             return WhisperCPPProvider(binaryPath: binary, modelPath: modelPath)
         case .openAIWhisper:

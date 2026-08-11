@@ -58,8 +58,17 @@ enum Delivery {
         // success, and do nothing. Believing them meant never falling back, so
         // the text silently went only to the clipboard.
         //
-        // So verify the document actually grew, and treat "can't tell" as failure.
+        // So verify the document actually changed, and treat "can't tell" as failure.
         if let element = target.element {
+            // Replacing a selection of exactly the dictated text's length leaves
+            // the character count untouched, so counting alone would read a
+            // perfectly good write as a failure and paste a duplicate on top of
+            // text that was already correct. Only in that narrow case is the
+            // whole value worth pulling across to compare.
+            let selectionLength = selectedText(of: element)?.count ?? 0
+            let lengthPreserving = selectionLength > 0 && selectionLength == text.count
+            let valueBefore = lengthPreserving ? value(of: element) : nil
+
             let before = characterCount(of: element)
             let wrote = AXUIElementSetAttributeValue(
                 element,
@@ -69,9 +78,17 @@ enum Delivery {
             let after = characterCount(of: element)
 
             lastAttemptDetail = "write=\(wrote) chars \(before.map(String.init) ?? "?")→\(after.map(String.init) ?? "?")"
+                + (lengthPreserving ? " (same-length selection)" : "")
 
-            if wrote, let before, let after, after != before {
-                return .directInsertion
+            if wrote {
+                if let before, let after, after != before {
+                    return .directInsertion
+                }
+                // Same length either way: the contents settle it.
+                if let valueBefore, let valueAfter = value(of: element), valueAfter != valueBefore {
+                    lastAttemptDetail += " value-changed"
+                    return .directInsertion
+                }
             }
         } else {
             lastAttemptDetail = "no element"
@@ -88,11 +105,12 @@ enum Delivery {
             copyToClipboard(text)
         }
 
-        try paste(into: target.application)
+        let pasteDelay = try paste(into: target.application)
 
         if let restore {
-            // Give the paste time to land before putting the clipboard back.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Give the paste time to land before putting the clipboard back —
+            // measured from when the keystroke actually goes out, not from now.
+            DispatchQueue.main.asyncAfter(deadline: .now() + pasteDelay + 0.4) {
                 copyToClipboard(restore)
             }
         }
@@ -112,29 +130,50 @@ enum Delivery {
             return number
         }
 
-        var value: AnyObject?
-        if AXUIElementCopyAttributeValue(
-            element, kAXValueAttribute as CFString, &value
-        ) == .success, let string = value as? String {
+        if let string = value(of: element) {
             return string.count
         }
 
         return nil
     }
 
+    /// The element's whole contents, when it will hand them over.
+    private static func value(of element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element, kAXValueAttribute as CFString, &value
+        ) == .success else { return nil }
+        return value as? String
+    }
+
+    /// The text currently selected in the element, if any.
+    private static func selectedText(of element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element, kAXSelectedTextAttribute as CFString, &value
+        ) == .success else { return nil }
+        return value as? String
+    }
+
+    /// How long the app waits for a reactivated target to take focus. Long
+    /// enough that the keystroke doesn't land in the previous app.
+    private static let activationDelay: TimeInterval = 0.12
+
     /// Reactivates the app that was frontmost when recording started, then
     /// synthesises ⌘V. Throws rather than failing silently if rights are missing.
-    static func paste(into target: NSRunningApplication?) throws {
+    ///
+    /// Returns how long the keystroke was deferred by. Reactivation needs a
+    /// moment to take effect, and this runs on the main actor — sleeping through
+    /// it froze the app's own UI, the recording panel included, on every paste
+    /// fallback. So the wait is scheduled rather than slept.
+    @discardableResult
+    static func paste(into target: NSRunningApplication?) throws -> TimeInterval {
         guard hasAccessibilityPermission else {
             throw VoiceSmithError.accessibilityPermissionDenied
         }
 
-        if let target, !target.isActive {
-            target.activate()
-            // Give the target a moment to take focus before the keystroke lands.
-            Thread.sleep(forTimeInterval: 0.12)
-        }
-
+        // Built up front so a failure is still thrown to the caller rather than
+        // disappearing into a scheduled block.
         guard let source = CGEventSource(stateID: .combinedSessionState) else {
             throw VoiceSmithError.accessibilityPermissionDenied
         }
@@ -151,8 +190,20 @@ enum Delivery {
 
         down.flags = .maskCommand
         up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+
+        func post() {
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+
+        if let target, !target.isActive {
+            target.activate()
+            DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay, execute: post)
+            return activationDelay
+        }
+
+        post()
+        return 0
     }
 
     // MARK: - Notifications

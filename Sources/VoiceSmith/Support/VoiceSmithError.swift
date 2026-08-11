@@ -82,7 +82,7 @@ enum VoiceSmithError: LocalizedError, Equatable {
         case .recordingFailed:
             return "Try again. If it keeps happening, check your input device in System Settings › Sound."
         case .emptyRecording:
-            return "Nothing was discarded to a provider. Check that the right input device is selected and try again."
+            return "Nothing was sent to a provider. Check that the right input device is selected and try again."
         case .offline:
             return "Retry when you're back online, switch to a local model, or keep the audio and transcribe it later."
         case .missingAPIKey:

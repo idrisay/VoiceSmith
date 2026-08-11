@@ -218,6 +218,11 @@ final class WindowRouter: ObservableObject {
             // Closing the window counts as finishing. Re-showing it on every
             // launch until the user reaches the last step would be nagware —
             // Settings › General has a "Run again…" button for a second pass.
+            // "Run again…" builds a second window, and the observer from the
+            // first one is still registered against the window it outlived.
+            if let onboardingCloseObserver {
+                NotificationCenter.default.removeObserver(onboardingCloseObserver)
+            }
             onboardingCloseObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification,
                 object: window,

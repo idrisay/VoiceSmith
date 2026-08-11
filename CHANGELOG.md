@@ -4,6 +4,56 @@ Each released version, newest first. The release workflow reads the section
 matching the tag and puts it at the top of the GitHub release notes, so the
 heading format matters: `## <version>`.
 
+## 1.6.1
+
+**Every way VoiceSmith could fail without telling you.** All of them were quiet
+by nature — the app carried on as if nothing had happened — so none would have
+been reported as bugs. Nothing here changes how dictation works.
+
+- **Pressing Escape mid-dictation no longer shows an error.** Cancelling a
+  request in flight looks like a dropped connection from the inside, so
+  stopping a dictation could end with a panel telling you that you were
+  offline. You asked it to stop; it stops.
+- **A reply cut off at the model's output limit is reported, not delivered.**
+  A truncated response is perfectly well-formed and missing its ending, so half
+  a sentence used to land in your document as if it were the finished text.
+- **Reasoning models can't leak their thinking into your text.** A `<think>`
+  block cut off before its closing tag was delivered whole — the model's private
+  monologue pasted where your words should be. `<thinking>`, `<reasoning>` and
+  `<thought>`, which some Ollama builds use instead, are now recognised too.
+- **"Keep audio for 30 days" now means 30 days.** The sweep only ran at launch,
+  and this app is built to sit in the menu bar for weeks — so the limit you
+  chose quietly became "until you next restart". It now runs after every
+  dictation.
+- **Dictating over selected text won't paste a duplicate.** Replacing a
+  selection exactly as long as what you said left the character count unchanged,
+  which read as a failed write, so the text was pasted a second time on top of
+  text that was already correct.
+- **A key your Keychain refuses to store now says so.** A locked keychain failed
+  the save silently and the field said "Stored". You found out at your next
+  dictation, as "no API key" — which reads as though you never entered one.
+- **A dictation shortcut that can't be serviced is reported as unavailable**
+  rather than registered and left doing nothing when pressed.
+- **Re-run in History shows you the new text.** The editor kept displaying the
+  old version, so Re-run looked like it had done nothing — and your next
+  keystroke wrote the stale text back over the improvement you'd asked for.
+- **Turning double-tap Shift off stays off across an upgrade.** Upgrading from
+  1.4 could switch a trigger you'd deliberately disabled back on.
+- **Transcription failures and rewrite failures are told apart.** A network
+  problem during the rewrite used to report itself as a transcription failure,
+  which sent you looking at the wrong provider.
+
+Whisper.cpp gets three fixes: a malformed argument that made some builds write
+a stray text file next to your audio or fail outright, a hang when the binary
+logged more than the pipe could hold, and a half-read recording being
+transcribed as though it were the whole thing. Clearing the binary path in
+Settings now goes back to finding it automatically, rather than looking for a
+binary at no path at all.
+
+Delivery no longer freezes the app's own interface, the recording popup
+included, for the moment it takes to bring your target app back to the front.
+That window was brief and only on the paste fallback, but it was visible.
+
 ## 1.6
 
 **VoiceSmith is now MIT licensed.** Use it, change it, ship it, sell it — keep

@@ -28,7 +28,9 @@ enum Storage {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
     }
 
-    /// Applies the retention policy. Called at launch and after each note is saved.
+    /// Applies the retention policy. Called at launch and after each note is
+    /// saved — a menu-bar app runs for weeks at a time, so a launch-only sweep
+    /// would quietly turn "keep for 30 days" into "keep until you next reboot".
     static func pruneAudio(retention: AudioRetention, keeping liveURLs: Set<String>) {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(

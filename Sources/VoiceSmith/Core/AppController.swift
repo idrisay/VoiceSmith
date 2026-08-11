@@ -87,6 +87,17 @@ final class AppController: ObservableObject {
     let store: NoteStore
 
     private var work: Task<Void, Never>?
+    /// Identifies the current run, so a cancelled one can tell "the user pressed
+    /// Escape" from "a newer dictation replaced me" and leave the newer one alone.
+    private var runToken = 0
+
+    /// Retires the current run. Anything still in flight from it is now stale and
+    /// must not touch the session — see `finishCancelled`.
+    ///
+    /// Every point where a run ends or a new one begins has to call this, not
+    /// just `process`: a cancelled request unwinds a turn or more later, and by
+    /// then the user may already be recording again.
+    private func retireRun() { runToken &+= 1 }
     private var windowPresenter: ((CGRect?) -> Void)?
     private var windowDismisser: (() -> Void)?
 
@@ -121,6 +132,12 @@ final class AppController: ObservableObject {
 
     func beginRecording(intent: CaptureIntent = .text) {
         self.intent = intent
+
+        // Before anything else, and synchronously: from here on the panel and
+        // the phase belong to this recording. A request cancelled a moment ago
+        // is still unwinding, and its "I was cancelled" must not arrive to find
+        // a token it recognises and tear this session down.
+        retireRun()
 
         // The previous dictation's to-dos are no longer undoable once a new one
         // starts — the panel that offered it is about to show something else.
@@ -164,6 +181,10 @@ final class AppController: ObservableObject {
     /// Escape: throw the audio away and get out of the way.
     func cancel() {
         work?.cancel()
+        // The teardown below is this method's job, done now. Retiring the run
+        // stops the cancelled task repeating it later, when it may no longer be
+        // the right thing to do.
+        retireRun()
         recorder.cancel()
         phase = .idle
         statusDetail = ""
@@ -204,6 +225,8 @@ final class AppController: ObservableObject {
 
     private func process(audio: URL, duration: TimeInterval) {
         work?.cancel()
+        retireRun()
+        let token = runToken
         work = Task { @MainActor in
             do {
                 // 1. Transcribe.
@@ -273,6 +296,7 @@ final class AppController: ObservableObject {
                 if !keepAudio {
                     try? FileManager.default.removeItem(at: audio)
                 }
+                applyRetention()
 
                 // 4. Deliver. This happens before any task filing, so the text
                 // reaches the user whatever the to-do step goes on to do.
@@ -318,12 +342,18 @@ final class AppController: ObservableObject {
                     if todoOutcome == nil, offeredAction == nil { windowDismisser?() }
                 }
             } catch is CancellationError {
-                phase = .idle
-                windowDismisser?()
+                finishCancelled(token)
             } catch let error as VoiceSmithError {
+                // Cancelling an in-flight request surfaces as a transport
+                // failure, not a CancellationError — URLSession throws -999 and
+                // the provider dutifully translates it into "you're offline".
+                // Escape means the user is done with this dictation; they should
+                // not get an error panel about it.
+                guard !Task.isCancelled else { return finishCancelled(token) }
                 // Keep the audio: the user shouldn't have to say it all again.
                 present(error, keepingAudio: error == .emptyRecording ? nil : audio)
             } catch {
+                guard !Task.isCancelled else { return finishCancelled(token) }
                 present(
                     .transcriptionFailed(
                         provider: settings.speechProvider.displayName,
@@ -365,6 +395,7 @@ final class AppController: ObservableObject {
         )
         store.insert(note)
         if !keepAudio { try? FileManager.default.removeItem(at: audio) }
+        applyRetention()
         pendingAudio = nil
 
         // Nothing but silence or punctuation came back. No reason to spend a
@@ -624,5 +655,35 @@ final class AppController: ObservableObject {
 
     private func durationOf(_ url: URL) -> TimeInterval {
         (try? AVAudioPlayer(contentsOf: url).duration) ?? 0
+    }
+
+    /// Winds up a run that was cancelled. Silent by design: the user asked for
+    /// this dictation to stop, so there is nothing to report.
+    ///
+    /// Does nothing if a newer run has since started — a cancellation that lands
+    /// late must not tear down the dictation that replaced it.
+    private func finishCancelled(_ token: Int) {
+        guard token == runToken else { return }
+        phase = .idle
+        statusDetail = ""
+        pendingAudio = nil
+        windowDismisser?()
+    }
+
+    // MARK: - Retention
+
+    /// Applies the audio retention policy after a note is saved.
+    ///
+    /// Launch is not enough on its own: this app is designed to sit in the menu
+    /// bar for weeks, and a user on "keep for 30 days" would accumulate audio
+    /// well past the bound they were promised until they happened to restart.
+    ///
+    /// Audio held back from a failure is exempt — the user is being offered a
+    /// retry with it, and pruning it out from under them would break that offer.
+    private func applyRetention() {
+        var keep = store.referencedAudioPaths
+        if let pendingAudio { keep.insert(pendingAudio.path) }
+        Storage.pruneAudio(retention: settings.audioRetention, keeping: keep)
+        store.reconcileAudioReferences()
     }
 }

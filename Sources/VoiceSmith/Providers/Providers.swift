@@ -208,12 +208,32 @@ enum HTTP {
         return "unknown error"
     }
 
+    /// Which half of the pipeline a request belonged to. A transport failure
+    /// looks identical from here, but telling the user transcription failed when
+    /// it was the rewrite that fell over sends them looking in the wrong place.
+    enum Stage {
+        case transcription
+        case improvement
+    }
+
     /// Maps transport failures onto the app's error vocabulary so the UI can offer
     /// the right recovery action.
-    static func classify(_ error: Error, provider: String, isLocal: Bool) -> VoiceSmithError {
+    static func classify(
+        _ error: Error,
+        provider: String,
+        isLocal: Bool,
+        stage: Stage = .transcription
+    ) -> VoiceSmithError {
+        func failed(_ detail: String) -> VoiceSmithError {
+            switch stage {
+            case .transcription: return .transcriptionFailed(provider: provider, detail: detail)
+            case .improvement: return .improvementFailed(provider: provider, detail: detail)
+            }
+        }
+
         let nsError = error as NSError
         guard nsError.domain == NSURLErrorDomain else {
-            return .transcriptionFailed(provider: provider, detail: error.localizedDescription)
+            return failed(error.localizedDescription)
         }
         switch nsError.code {
         case NSURLErrorNotConnectedToInternet,
@@ -227,8 +247,16 @@ enum HTTP {
             return isLocal
                 ? .localModelUnavailable(provider: provider, detail: "nothing is listening on that address")
                 : .offline(provider: provider)
+        case NSURLErrorCancelled:
+            // The user pressed Escape. Nobody is going to read this — the
+            // pipeline drops cancelled runs — but calling it "offline" was how
+            // an abandoned dictation used to end in an error panel.
+            return failed("the request was cancelled")
         default:
-            return .offline(provider: provider)
+            // Anything else is a real failure of some kind, and only some of
+            // them are connectivity. Say what happened rather than asserting
+            // the network is down.
+            return failed(error.localizedDescription)
         }
     }
 

@@ -42,7 +42,7 @@ struct AnthropicProvider: TextProvider {
         do {
             (data, response) = try await HTTP.session.data(for: request)
         } catch {
-            throw HTTP.classify(error, provider: displayName, isLocal: false)
+            throw HTTP.classify(error, provider: displayName, isLocal: false, stage: .improvement)
         }
 
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -65,6 +65,15 @@ struct AnthropicProvider: TextProvider {
         // stop reason before touching `content`.
         if object["stop_reason"] as? String == "refusal" {
             throw VoiceSmithError.refused(provider: displayName)
+        }
+
+        // Stopping at the token ceiling produces a well-formed response holding
+        // half a sentence. Report it rather than pasting a truncated dictation.
+        if object["stop_reason"] as? String == "max_tokens" {
+            throw VoiceSmithError.improvementFailed(
+                provider: displayName,
+                detail: "the reply was cut off at the model's output limit"
+            )
         }
 
         guard let content = object["content"] as? [[String: Any]] else {

@@ -115,7 +115,6 @@ final class AppSettings: ObservableObject {
             "addToTaskList": false,
             "offerDetectedActions": true,
             "calendarID": "",
-            "todoTapModifier": TapModifier.option.rawValue,
             "reminderListID": "",
             "copyToClipboard": true,
             "autoPaste": true,
@@ -124,7 +123,12 @@ final class AppSettings: ObservableObject {
             "audioRetention": AudioRetention.deleteAfterTranscription.rawValue,
             "maxRecordingSeconds": 600,
             "hasCompletedOnboarding": false,
-            "dictationTapModifier": TapModifier.shift.rawValue,
+            // The two tap modifiers are deliberately absent: registering a
+            // default puts it in the search list, so `string(forKey:)` would
+            // always find one and `storedModifier` could never see that the key
+            // is unset — which is how it recognises an upgrade from the old
+            // boolean settings. Their defaults live in `storedModifier`'s
+            // `fallback` instead.
             // ⌃⌥⌘Space. kVK_Space is 49; 6400 = controlKey|optionKey|cmdKey.
             // Not ⌥⌘Space: macOS reserves that for "Show Finder search window",
             // so it opened Finder instead of recording.

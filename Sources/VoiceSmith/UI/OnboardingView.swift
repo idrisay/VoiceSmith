@@ -601,9 +601,14 @@ private struct KeyEntry: View {
         }
     }
 
+    /// Keeps whatever the user typed on a failure — clearing the field would
+    /// throw away a key they may not have anywhere else.
     private func save() {
         guard !entry.isEmpty else { return }
-        Keychain.set(entry, for: account)
+        guard Keychain.set(entry, for: account) else {
+            state = .failed("The key couldn't be saved to your Keychain. Unlock it in Keychain Access and try again.")
+            return
+        }
         entry = ""
         stored = true
         state = .idle

@@ -6,13 +6,19 @@ import Security
 enum Keychain {
     private static let service = "com.voicesmith.apikeys"
 
-    static func set(_ value: String, for account: String) {
+    /// Stores a key, reporting whether it actually landed.
+    ///
+    /// The result is worth checking: a locked keychain or a denied ACL fails
+    /// here and nowhere else. Treated as success, the field says "Stored" and
+    /// the user finds out at their next dictation, as "no API key" — which
+    /// reads as "I never entered one" rather than "saving it failed".
+    static func set(_ value: String, for account: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             remove(account)
-            return
+            return true
         }
-        guard let data = trimmed.data(using: .utf8) else { return }
+        guard let data = trimmed.data(using: .utf8) else { return false }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -24,10 +30,16 @@ enum Keychain {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
 
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
-            SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
+            status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
         }
+
+        guard status == errSecSuccess else {
+            NSLog("VoiceSmith: could not save the \(account) key to the Keychain (OSStatus \(status)).")
+            return false
+        }
+        return true
     }
 
     static func get(_ account: String) -> String? {

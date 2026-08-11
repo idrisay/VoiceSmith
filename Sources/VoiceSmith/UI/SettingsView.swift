@@ -372,6 +372,7 @@ private struct APIKeyField: View {
 
     @State private var entry = ""
     @State private var stored = false
+    @State private var saveFailed = false
 
     var body: some View {
         HStack {
@@ -395,13 +396,26 @@ private struct APIKeyField: View {
         .onAppear { stored = Keychain.has(account) }
         .onChange(of: account) { _, new in
             entry = ""
+            saveFailed = false
             stored = Keychain.has(new)
+        }
+        if saveFailed {
+            Text("The key couldn't be saved to your Keychain. Unlock it in Keychain Access and try again.")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
+    /// Keeps whatever the user typed on a failure — clearing the field would
+    /// throw away a key they may not have anywhere else.
     private func save() {
         guard !entry.isEmpty else { return }
-        Keychain.set(entry, for: account)
+        guard Keychain.set(entry, for: account) else {
+            saveFailed = true
+            return
+        }
+        saveFailed = false
         entry = ""
         stored = true
     }

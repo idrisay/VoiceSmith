@@ -128,6 +128,19 @@ private struct NoteDetail: View {
         }
         .onAppear { draft = currentText }
         .onChange(of: showingRaw) { _, _ in draft = currentText }
+        // Re-run rewrites the note underneath a draft that was seeded once, so
+        // without this the editor goes on showing the old text — Re-run looks
+        // like it did nothing, and the next keystroke writes the stale draft
+        // back over the new improvement.
+        .onChange(of: note.improvedText) { _, _ in syncDraft() }
+        .onChange(of: note.rawTranscript) { _, _ in syncDraft() }
+    }
+
+    /// Pulls the note's text back into the editor, unless the editor already
+    /// agrees — the note changing because the user is typing must not disturb
+    /// the cursor.
+    private func syncDraft() {
+        if draft != currentText { draft = currentText }
     }
 
     private var currentText: String {

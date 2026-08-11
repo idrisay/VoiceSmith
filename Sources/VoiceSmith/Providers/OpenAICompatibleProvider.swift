@@ -31,7 +31,7 @@ struct OpenAICompatibleProvider: TextProvider {
         do {
             (data, response) = try await HTTP.session.data(for: request)
         } catch {
-            throw HTTP.classify(error, provider: displayName, isLocal: isLocal)
+            throw HTTP.classify(error, provider: displayName, isLocal: isLocal, stage: .improvement)
         }
 
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -53,10 +53,20 @@ struct OpenAICompatibleProvider: TextProvider {
 
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = object["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
+              let choice = choices.first,
+              let message = choice["message"] as? [String: Any],
               let content = message["content"] as? String
         else {
             throw VoiceSmithError.improvementFailed(provider: displayName, detail: "unreadable response")
+        }
+
+        // A reply that hit the output limit parses perfectly well and is missing
+        // its ending. Delivering it would silently truncate the user's own words.
+        if choice["finish_reason"] as? String == "length" {
+            throw VoiceSmithError.improvementFailed(
+                provider: displayName,
+                detail: "the reply was cut off at the model's output limit"
+            )
         }
 
         let improved = Self.stripReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -66,11 +76,31 @@ struct OpenAICompatibleProvider: TextProvider {
         return improved
     }
 
+    /// Tag names reasoning models wrap their thinking in. `think` is DeepSeek
+    /// R1's and the most common; the others turn up on various Ollama builds.
+    private static let reasoningTags = ["think", "thinking", "reasoning", "thought"]
+
     /// Reasoning models (DeepSeek R1, several Ollama builds) prepend a `<think>`
     /// block to the message body. The user wants their text, not the reasoning.
+    ///
+    /// A reply that opens a block and never closes it was cut off mid-thought —
+    /// a token limit, a dropped connection, a cancelled request. There is no
+    /// answer in it, only reasoning, so it returns nothing and the caller reports
+    /// a failure. Handing the raw thinking back as "the improved text" would
+    /// paste the model's monologue into whatever the user was writing.
     static func stripReasoning(_ text: String) -> String {
-        guard let end = text.range(of: "</think>") else { return text }
-        return String(text[end.upperBound...])
+        for tag in reasoningTags {
+            if let end = text.range(of: "</\(tag)>", options: [.caseInsensitive]) {
+                return String(text[end.upperBound...])
+            }
+        }
+
+        let leading = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for tag in reasoningTags where leading.hasPrefix("<\(tag)>") {
+            return ""
+        }
+
+        return text
     }
 }
 
@@ -101,7 +131,7 @@ struct OllamaProvider: TextProvider {
         do {
             (data, response) = try await HTTP.session.data(for: request)
         } catch {
-            throw HTTP.classify(error, provider: displayName, isLocal: true)
+            throw HTTP.classify(error, provider: displayName, isLocal: true, stage: .improvement)
         }
 
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -120,6 +150,14 @@ struct OllamaProvider: TextProvider {
               let content = message["content"] as? String
         else {
             throw VoiceSmithError.improvementFailed(provider: displayName, detail: "unreadable response")
+        }
+
+        // Ollama's spelling of the same thing: the reply ran out of tokens.
+        if object["done_reason"] as? String == "length" {
+            throw VoiceSmithError.improvementFailed(
+                provider: displayName,
+                detail: "the reply was cut off at the model's output limit"
+            )
         }
 
         let improved = OpenAICompatibleProvider.stripReasoning(content)

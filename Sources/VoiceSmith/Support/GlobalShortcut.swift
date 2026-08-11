@@ -35,7 +35,10 @@ final class GlobalShortcut {
             eventKind: UInt32(kEventHotKeyPressed)
         )
 
-        InstallEventHandler(
+        // Without a handler the hot key still registers and still fires — into
+        // nothing. Reported as a failure so Settings says the shortcut is dead
+        // rather than leaving the user pressing a key that does nothing.
+        let installed = InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, userData -> OSStatus in
                 guard let userData else { return noErr }
@@ -71,7 +74,14 @@ final class GlobalShortcut {
             0,
             &hotKeyRef
         )
-        return status == noErr && hotKeyRef != nil
+
+        guard installed == noErr, status == noErr, hotKeyRef != nil else {
+            // Don't sit on a combination we can't service — another app may be
+            // able to use it, and we'd only be swallowing the keystroke.
+            unregister()
+            return false
+        }
+        return true
     }
 
     /// Combinations macOS reserves for itself. Registering one appears to succeed
